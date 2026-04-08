@@ -1,0 +1,448 @@
+      <!-- ══ DASHBOARD TAB ══ -->
+      <section id="dashboardTab" class="dash-panel active fade-up delay-1">
+
+        <div class="spotlight-strip">
+          <div class="glass-card spotlight-card">
+            <div class="spotlight-lbl">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Overview
+            </div>
+            <h3>Track attendance in real time with a cleaner operator flow.</h3>
+            <p>Move from session creation to scanning to export without switching context.</p>
+          </div>
+          <div class="glass-card spotlight-card spotlight-2">
+            <div class="spotlight-lbl">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Session Rules
+            </div>
+            <h3>Present, late, and absent computed from one controlled source.</h3>
+            <p>Consistent audit trail for every section across all attendance windows.</p>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="glass-card filter-card">
+          <div class="filter-lbl">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Attendance Filters
+          </div>
+          <div class="filter-grid">
+            <div class="field-group">
+              <label class="field-label">Session</label>
+              <select id="dashboardSessionSelect"></select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Section</label>
+              <select id="dashboardSectionFilter">
+                <option value="">All sections</option>
+                <option>WMD-1A</option><option>WMD-1B</option><option>WMD-1C</option>
+                <option>WMD-2A</option><option>WMD-2B</option><option>WMD-2C</option>
+                <option>BSIT-3A</option><option>BSIT-3B</option>
+                <option>BSIT-4A</option><option>BSIT-4B</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Date</label>
+              <input type="date" id="dashboardDateFilter">
+            </div>
+            <button type="button" class="btn btn-primary" id="refreshDashboardBtn" style="align-self:flex-end;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.47"/></svg>
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+          <div class="glass-card stat-card stat-present">
+            <div class="stat-top">
+              <div class="stat-label">Present</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+            </div>
+            <div class="stat-num" id="presentCount">0</div>
+          </div>
+          <div class="glass-card stat-card stat-late">
+            <div class="stat-top">
+              <div class="stat-label">Late</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+            </div>
+            <div class="stat-num" id="lateCount">0</div>
+          </div>
+          <div class="glass-card stat-card stat-absent">
+            <div class="stat-top">
+              <div class="stat-label">Absent</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              </div>
+            </div>
+            <div class="stat-num" id="absentCount">0</div>
+          </div>
+        </div>
+
+        <!-- Session info + Absentees -->
+        <div class="dash-grid-2">
+          <div class="glass-card dash-card">
+            <div class="dash-card-header">
+              <div>
+                <div class="dash-card-lbl">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                  Selected Session
+                </div>
+                <h3 id="selectedSessionTitle">No session selected</h3>
+              </div>
+              <div class="status-pill" id="selectedSessionStatus">Waiting for data</div>
+            </div>
+            <div class="detail-list" id="sessionMeta"></div>
+          </div>
+
+          <div class="glass-card dash-card">
+            <div class="dash-card-header">
+              <div>
+                <div class="dash-card-lbl">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                  Absentees
+                </div>
+                <h3>Students with no attendance record</h3>
+              </div>
+            </div>
+            <div class="list-stack" id="absentList"></div>
+          </div>
+        </div>
+
+        <!-- Sessions table -->
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                Session Activity
+              </div>
+              <h3>Recent session list</h3>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Session Code</th><th>Section</th><th>Subject</th><th>Date</th><th>Window</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="sessionTableBody">
+                <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-500);">Loading sessions…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ══ STUDENTS TAB ══ -->
+      <section id="studentsTab" class="dash-panel">
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                Registered Students
+              </div>
+              <h3>All students registered in the system</h3>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;" class="students-filter-group">
+            <input id="studentsSearch" type="text" placeholder="Search by name or ID" style="flex:1;min-width:180px;">
+            <select id="studentsSectionFilter" style="min-width:160px;">
+              <option value="">All sections</option>
+              <option>WMD-1A</option><option>WMD-1B</option><option>WMD-1C</option>
+              <option>WMD-2A</option><option>WMD-2B</option><option>WMD-2C</option>
+              <option>BSIT-3A</option><option>BSIT-3B</option>
+              <option>BSIT-4A</option><option>BSIT-4B</option>
+            </select>
+            <button type="button" class="btn btn-primary" id="studentsSearchBtn">Search</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Full Name</th>
+                  <th>Course</th>
+                  <th>Year Level</th>
+                  <th>Section</th>
+                  <th>Email</th>
+                  <th>Date Registered</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="studentsTableBody">
+                <tr><td colspan="8" style="text-align:center;padding:22px;color:var(--text-500);">No students loaded.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ CREATE SESSION TAB ══ -->
+      <section id="sessionTab" class="dash-panel">
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Create Attendance Session
+              </div>
+              <h3>Set time-in, late threshold, and time-out</h3>
+            </div>
+          </div>
+          <form id="sessionForm" class="session-form-grid">
+            <div class="field-group">
+              <label class="field-label">Section</label>
+              <select id="sessionSection">
+                <option value="">Select section</option>
+                <option>WMD-1A</option><option>WMD-1B</option><option>WMD-1C</option>
+                <option>WMD-2A</option><option>WMD-2B</option><option>WMD-2C</option>
+                <option>BSIT-3A</option><option>BSIT-3B</option>
+                <option>BSIT-4A</option><option>BSIT-4B</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Subject</label>
+              <input type="text" id="sessionSubject" placeholder="e.g. Networking Laboratory">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Time In Start</label>
+              <input type="time" id="timeInStart">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Late Threshold</label>
+              <input type="time" id="timeInEnd">
+            </div>
+            <div class="field-group col-full">
+              <label class="field-label">Time Out</label>
+              <input type="time" id="timeOutStart">
+            </div>
+            <div class="col-full">
+              <button type="submit" class="btn btn-primary btn-full btn-lg" id="createSessionBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Create Session
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Session timing guide -->
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Timing Guide
+              </div>
+              <h3>Session status workflow</h3>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;">
+            <div style="padding:16px;border:1px solid rgba(76,175,80,0.3);border-radius:var(--r-lg);background:rgba(76,175,80,0.05);">
+              <div style="font-size:0.75rem;font-weight:700;color:var(--success-400);text-transform:uppercase;margin-bottom:4px;">Active</div>
+              <div style="font-size:0.8125rem;color:var(--text-300);">Start → Deadline</div>
+              <div style="font-size:0.7rem;color:var(--text-500);margin-top:4px;">Students marked "Present"</div>
+            </div>
+            <div style="padding:16px;border:1px solid rgba(255,152,0,0.3);border-radius:var(--r-lg);background:rgba(255,152,0,0.05);">
+              <div style="font-size:0.75rem;font-weight:700;color:var(--warning-400);text-transform:uppercase;margin-bottom:4px;">Late Window</div>
+              <div style="font-size:0.8125rem;color:var(--text-300);">Deadline → Cutoff</div>
+              <div style="font-size:0.7rem;color:var(--text-500);margin-top:4px;">Students marked "Late"</div>
+            </div>
+            <div style="padding:16px;border:1px solid rgba(244,67,54,0.3);border-radius:var(--r-lg);background:rgba(244,67,54,0.05);">
+              <div style="font-size:0.75rem;font-weight:700;color:var(--error-400);text-transform:uppercase;margin-bottom:4px;">Timed Out</div>
+              <div style="font-size:0.8125rem;color:var(--text-300);">Cutoff → End</div>
+              <div style="font-size:0.7rem;color:var(--text-500);margin-top:4px;">Time-out start</div>
+            </div>
+            <div style="padding:16px;border:1px solid rgba(158,158,158,0.3);border-radius:var(--r-lg);background:rgba(158,158,158,0.05);">
+              <div style="font-size:0.75rem;font-weight:700;color:var(--text-600);text-transform:uppercase;margin-bottom:4px;">Ended</div>
+              <div style="font-size:0.8125rem;color:var(--text-400);">After end time</div>
+              <div style="font-size:0.7rem;color:var(--text-500);margin-top:4px;">Session inactive</div>
+            </div>
+          </div>
+          <div style="margin-top:16px;padding:12px 14px;background:rgba(255,255,255,0.05);border-radius:var(--r-lg);font-size:0.8125rem;color:var(--text-400);">
+            <strong>Example:</strong> Session 7:00 PM (start) | 7:15 PM (deadline) | 8:00 PM (cutoff) | 8:30 PM (end)
+          </div>
+        </div>
+
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Latest Created Session
+              </div>
+              <div id="sessionCodeWrapper" class="session-code-wrapper" style="display:none;">
+                <div class="session-code-container">
+                  <span class="session-code-label">Session Code</span>
+                  <div class="session-code-display">
+                    <code id="sessionCodeValue">—</code>
+                    <button type="button" class="btn-copy" id="copySessionCodeBtn" title="Copy session code">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <h3 id="sessionCreationMessage" style="margin-top:12px;">No session created yet</h3>
+              </div>
+              <h3 id="noSessionMessage">No session created yet</h3>
+            </div>
+          </div>
+          <div class="detail-list" id="sessionCreationMeta"></div>
+        </div>
+      </section>
+
+      <!-- ══ SCANNER TAB ══ -->
+      <section id="scannerTab" class="dash-panel">
+        <div class="scanner-layout">
+          <div class="glass-card dash-card">
+            <div class="dash-card-header">
+              <div>
+                <div class="dash-card-lbl">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  QR Scanner
+                </div>
+                <h3>Integrated attendance scanner</h3>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <label class="field-label">Active Session</label>
+              <select id="scannerSessionSelect"></select>
+            </div>
+
+            <div class="scanner-actions">
+              <button type="button" class="btn btn-primary" id="startScannerBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Start Scanner
+              </button>
+              <button type="button" class="btn btn-secondary" id="stopScannerBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                Stop
+              </button>
+              <button type="button" class="btn btn-secondary" id="backCameraBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                Back Camera
+              </button>
+            </div>
+
+            <div class="scanner-box">
+              <div id="reader"></div>
+            </div>
+
+            <div class="field-group">
+              <label class="field-label">Upload QR Image</label>
+              <input type="file" id="qr-input" accept="image/*">
+            </div>
+
+            <div class="scan-result" id="result">
+              <span style="color:var(--text-500);">Scanner waiting for a QR code.</span>
+            </div>
+          </div>
+
+          <div class="glass-card dash-card">
+            <div class="dash-card-header">
+              <div>
+                <div class="dash-card-lbl">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  Scanner Notes
+                </div>
+                <h3>Secure scan workflow</h3>
+              </div>
+            </div>
+            <div class="scanner-notes">
+              <div class="scanner-note">
+                <div class="scanner-note-title">Session-based validation</div>
+                <div class="scanner-note-desc">Each QR scan is matched with the currently selected attendance session.</div>
+              </div>
+              <div class="scanner-note">
+                <div class="scanner-note-title">Automatic attendance logging</div>
+                <div class="scanner-note-desc">Present, late, and time-out are logged according to the session time settings.</div>
+              </div>
+              <div class="scanner-note">
+                <div class="scanner-note-title">Restricted portal access</div>
+                <div class="scanner-note-desc">Only authenticated admin and teacher accounts can use this dashboard.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ REPORTS TAB ══ -->
+      <section id="reportsTab" class="dash-panel">
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Attendance Reports
+              </div>
+              <h3>View and export attendance records</h3>
+            </div>
+          </div>
+
+          <div class="reports-filter">
+            <div class="field-group">
+              <label class="field-label">Session</label>
+              <select id="reportSessionSelect"></select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Section</label>
+              <select id="reportSectionFilter">
+                <option value="">All sections</option>
+                <option>WMD-1A</option><option>WMD-1B</option><option>WMD-1C</option>
+                <option>WMD-2A</option><option>WMD-2B</option><option>WMD-2C</option>
+                <option>BSIT-3A</option><option>BSIT-3B</option>
+                <option>BSIT-4A</option><option>BSIT-4B</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Date</label>
+              <input type="date" id="reportDateFilter">
+            </div>
+            <button type="button" class="btn btn-primary" id="generateReportBtn" style="align-self:flex-end;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.47"/></svg>
+              Generate Report
+            </button>
+            <button type="button" class="btn btn-secondary" id="downloadCsvBtn" style="align-self:flex-end;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              CSV
+            </button>
+            <button type="button" class="btn btn-secondary" id="downloadPdfBtn" style="align-self:flex-end;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              PDF
+            </button>
+          </div>
+
+          <!-- Report scope summary -->
+          <div class="detail-list" id="reportScope" style="margin-top:20px;"></div>
+
+          <!-- Attendance report table (shown after Generate Report) -->
+          <div id="reportTableWrap" style="margin-top:24px;display:none;">
+            <div id="reportCountStrip" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;"></div>
+            <div class="table-wrap">
+              <table id="reportTable">
+                <thead>
+                  <tr>
+                    <th style="width:40px;text-align:center;">#</th>
+                    <th>Student Name</th>
+                    <th>Student ID</th>
+                    <th>Time In</th>
+                    <th>Time Out</th>
+                    <th style="text-align:center;">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="reportTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>

@@ -1,0 +1,271 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ECC Attendance | Student Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div class="dashboard-shell">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside class="dash-sidebar">
+      <div class="sidebar-brand">
+        <div>
+          <div class="sidebar-brand-name" style="display:flex;align-items:center;gap:8px;line-height:1;height:auto;">
+            <span style="line-height:1.2;">ECC Attendance</span>
+          </div>
+          <div class="sidebar-brand-sub">Student Portal</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section-lbl">Navigation</div>
+      <nav>
+        <button class="sidebar-nav-link active" data-tab-target="dashboardTab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </button>
+        <button class="sidebar-nav-link" data-tab-target="attendanceTab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          My Attendance
+        </button>
+        <a class="sidebar-nav-link" href="{% url 'student' %}#qr-panel">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Generate QR Pass
+        </a>
+      </nav>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-footer">
+        <a class="sidebar-nav-link" href="{% url 'student' %}">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+          Student Portal
+        </a>
+      </div>
+    </aside>
+
+    <!-- ═══ MAIN ═══ -->
+    <main class="dash-main">
+
+      <!-- Header -->
+      <header class="dash-header fade-up">
+        <button id="sidebarToggle" class="btn btn-ghost" style="display:none;margin-right:12px;align-self:flex-start;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="dash-header-left">
+          <div class="dash-overline">Student / Dashboard</div>
+          <h1>My Attendance Overview</h1>
+          <p>Track your attendance records, view analytics, and monitor your academic progress.</p>
+          <div class="dash-header-chips">
+            <span class="chip chip-blue">Personal Analytics</span>
+            <span class="chip">Attendance History</span>
+            <span class="chip">Progress Tracking</span>
+          </div>
+        </div>
+        <div class="glass-card dash-userbox">
+          <div class="dash-userbox-lbl">Student ID</div>
+          <div class="dash-userbox-name" id="studentId">Loading…</div>
+        </div>
+      </header>
+
+      <!-- ══ DASHBOARD TAB ══ -->
+      <section id="dashboardTab" class="dash-panel active fade-up delay-1">
+
+        <!-- Student Profile Section -->
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6"/></svg>
+                Student Profile
+              </div>
+              <h3>Your Academic Information</h3>
+            </div>
+          </div>
+          <div class="detail-list student-profile-info" id="studentProfile">
+            <div class="detail-item">
+              <div class="detail-label">Student ID</div>
+              <div class="detail-value" id="profileStudentId">-</div>
+            </div>
+            <div class="detail-item">
+              <div class="detail-label">Full Name</div>
+              <div class="detail-value" id="profileName">-</div>
+            </div>
+            <div class="detail-item">
+              <div class="detail-label">Section</div>
+              <div class="detail-value" id="profileSection">-</div>
+            </div>
+            <div class="detail-item">
+              <div class="detail-label">Favorite Teacher</div>
+              <div class="detail-value" id="profileTeacher">-</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attendance Analytics -->
+        <div class="stats-row">
+          <div class="glass-card stat-card stat-present">
+            <div class="stat-top">
+              <div class="stat-label">Present</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+            </div>
+            <div class="stat-num" id="presentCount">0</div>
+          </div>
+          <div class="glass-card stat-card stat-late">
+            <div class="stat-top">
+              <div class="stat-label">Late</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+            </div>
+            <div class="stat-num" id="lateCount">0</div>
+          </div>
+          <div class="glass-card stat-card stat-absent">
+            <div class="stat-top">
+              <div class="stat-label">Absent</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              </div>
+            </div>
+            <div class="stat-num" id="absentCount">0</div>
+          </div>
+          <div class="glass-card stat-card stat-percentage">
+            <div class="stat-top">
+              <div class="stat-label">Attendance %</div>
+              <div class="stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              </div>
+            </div>
+            <div class="stat-num" id="attendancePercentage">0%</div>
+          </div>
+        </div>
+
+        <!-- Attendance Performance Trend -->
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16M7 15l4-6 4 8"/></svg>
+                Performance Trend
+              </div>
+              <h3>Recent session attendance</h3>
+            </div>
+          </div>
+          <div id="attendanceTrendChart">
+            <div style="color: var(--text-secondary); text-align:center; width:100%;">Loading attendance trend...</div>
+          </div>
+        </div>
+
+        <!-- Recent Attendance Logs -->
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Recent Attendance Logs
+              </div>
+              <h3>Your Latest Session Records</h3>
+            </div>
+          </div>
+          <div class="data-table-container">
+            <table class="data-table" id="attendanceTable">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Session Code</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceTableBody">
+                <tr>
+                  <td colspan="3" style="text-align: center; padding: 2rem; color: var(--text-secondary);">Loading attendance records...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ══ ATTENDANCE TAB ══ -->
+      <section id="attendanceTab" class="dash-panel fade-up delay-1">
+
+        <div class="glass-card filter-card">
+          <div class="filter-lbl">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Attendance Filters
+          </div>
+          <div class="filter-grid">
+            <div class="field-group">
+              <label class="field-label">From Date</label>
+              <input type="date" id="attendanceFromDate">
+            </div>
+            <div class="field-group">
+              <label class="field-label">To Date</label>
+              <input type="date" id="attendanceToDate">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Status</label>
+              <select id="attendanceStatusFilter">
+                <option value="">All Status</option>
+                <option value="present">Present</option>
+                <option value="late">Late</option>
+                <option value="absent">Absent</option>
+              </select>
+            </div>
+            <button type="button" class="btn btn-primary" id="filterAttendanceBtn" style="align-self:flex-end;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.51 15a9 9 0 1 0 .49-4.47"/></svg>
+              Apply Filters
+            </button>
+          </div>
+        </div>
+
+        <div class="glass-card dash-card">
+          <div class="dash-card-header">
+            <div>
+              <div class="dash-card-lbl">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Complete Attendance History
+              </div>
+              <h3>All Your Session Records</h3>
+            </div>
+          </div>
+          <div class="data-table-container">
+            <table class="data-table" id="fullAttendanceTable">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Session Code</th>
+                  <th>Subject</th>
+                  <th>Status</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="fullAttendanceTableBody">
+                <tr>
+                  <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">Loading attendance records...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+    </main><!-- /dash-main -->
+  </div><!-- /dashboard-shell -->
+
+  <script>const API_BASE = '';</script>
+  <script src="{% static 'js/student-dashboard.js' %}"></script>
+</body>
+</html>

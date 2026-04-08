@@ -1,0 +1,110 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ECC Attendance | Admin Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div class="dashboard-shell">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside class="dash-sidebar">
+      <div class="sidebar-brand">
+        <div>
+          <div class="sidebar-brand-name" style="display:flex;align-items:center;gap:8px;line-height:1;height:auto;">
+            <span style="line-height:1.2;">ECC Attendance</span>
+          </div>
+          <div class="sidebar-brand-sub">Admin Portal</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section-lbl">Navigation</div>
+      <nav>
+        <button class="sidebar-nav-link active" data-tab-target="dashboardTab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </button>
+        <button class="sidebar-nav-link" data-tab-target="sessionTab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Create Session
+        </button>
+        <button class="sidebar-nav-link" data-tab-target="scannerTab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Scanner
+        </button>
+        <button class="sidebar-nav-link" data-tab-target="reportsTab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Reports
+        </button>
+        <button class="sidebar-nav-link" data-tab-target="studentsTab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6"/></svg>
+          Students
+        </button>
+      </nav>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-footer">
+        <a class="sidebar-nav-link" href="{% url 'student' %}">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+          Student Portal
+        </a>
+        <button type="button" class="sidebar-nav-link" id="logoutBtn">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Log Out
+        </button>
+      </div>
+    </aside>
+
+    <!-- ═══ MAIN ═══ -->
+    <main class="dash-main">
+
+      <!-- Header -->
+      <header class="dash-header fade-up">
+        <button id="sidebarToggle" class="btn btn-ghost" style="display:none;margin-right:12px;align-self:flex-start;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="dash-header-left">
+          <div class="dash-overline">Admin / Teacher Portal</div>
+          <h1>Attendance Control</h1>
+          <p>Manage sessions, scan QR codes, monitor attendance, and export reports — all from one portal.</p>
+          <div class="dash-header-chips">
+            <span class="chip chip-blue">Live Scanning</span>
+            <span class="chip">Session Security</span>
+            <span class="chip">Export Ready</span>
+          </div>
+        </div>
+        <div class="glass-card dash-userbox">
+          <div class="dash-userbox-lbl">Signed in as</div>
+          <div class="dash-userbox-name" id="portalUser">Loading…</div>
+        </div>
+        <div class="mobile-actions" style="display:none;align-items:center;gap:8px;margin-left:12px;">
+          <a href="{% url 'student' %}" class="btn btn-ghost btn-sm">Student Portal</a>
+          <button id="mobileLogoutBtn" class="btn btn-ghost btn-sm">Log Out</button>
+        </div>
+      </header>
+
+      <!-- ══ DASHBOARD TAB and entire original admin HTML content inserted below (unchanged logic) -->
+      <!-- For brevity in the patch we reuse the original frontend/admin.html markup and scripts, with two changes: -->
+      <!-- 1) CSS reference uses {% static 'css/style.css' %} (above). -->
+      <!-- 2) All occurrences of absolute/host-detection API_BASE are replaced with a relative base: const API_BASE = ''; -->
+
+      <!-- Insert full admin UI content (omitted here to keep file compact) -->
+        <!-- Full admin UI content copied from original frontend/admin.html -->
+        {% include "_admin_content.html" %}
+
+    </main><!-- /dash-main -->
+  </div><!-- /dashboard-shell -->
+
+  <script src="{% static 'js/admin.js' %}"></script>
+  </body>
+  </html>

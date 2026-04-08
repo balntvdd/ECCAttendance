@@ -1,0 +1,162 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ECC Attendance | Admin Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div class="login-page">
+    <div class="login-card scale-in">
+
+      <div class="login-brand">
+        <div class="login-logo-ring">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+        </div>
+        <div class="login-brand-sub">ECC Attendance System</div>
+        <h2>Admin Access</h2>
+        <p>Use your staff credentials to continue to the dashboard.</p>
+      </div>
+
+      <form id="loginForm" class="login-form">
+        <div class="field-group">
+          <label class="field-label" for="username">Username</label>
+          <input type="text" id="username" autocomplete="username" placeholder="Enter credentials">
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="password">Password</label>
+          <div class="pw-wrap">
+            <input type="password" id="password" autocomplete="current-password" placeholder="Enter password">
+            <button type="button" class="pw-eye" id="togglePassword" tabindex="-1" aria-label="Toggle password">
+              <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full btn-lg" id="loginBtn" style="margin-top:6px;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Secure Login
+        </button>
+      </form>
+
+      <div id="loginError" class="login-error"></div>
+
+      <a href="{% url 'home' %}" class="login-back">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back to landing page
+      </a>
+
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+
+    function getCookie(name) {
+      const v = `; ${document.cookie}`;
+      const p = v.split(`; ${name}=`);
+      return p.length === 2 ? p.pop().split(";").shift() : "";
+    }
+
+    function showToast(msg, type = "info") {
+      const c = document.getElementById("toastContainer");
+      const t = document.createElement("div");
+      t.className = `toast toast-${type}`;
+      const icons = {
+        success: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toast-icon"><polyline points="20 6 9 17 4 12"/></svg>',
+        error:   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toast-icon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+        warning: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toast-icon"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        info:    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toast-icon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+      };
+      t.innerHTML = `${icons[type]||icons.info}<span class="toast-msg">${msg}</span><button class="toast-close" onclick="removeToast(this.parentElement)">×</button>`;
+      c.appendChild(t);
+      const tid = setTimeout(() => removeToast(t), 4500);
+      t._tid = tid;
+    }
+    function removeToast(t) {
+      if (!t || !t.parentElement) return;
+      clearTimeout(t._tid);
+      t.classList.add("removing");
+      setTimeout(() => t.remove(), 280);
+    }
+
+    async function redirectIfAuthenticated() {
+      try {
+        const res = await fetch(`/api/portal-bootstrap/`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        sessionStorage.setItem("ecc_admin_user", data.user?.username || "Admin");
+        window.location.replace("{% url 'portal-dashboard' %}");
+      } catch {}
+    }
+
+    // Password toggle
+    document.getElementById("togglePassword").addEventListener("click", () => {
+      const inp = document.getElementById("password");
+      const icon = document.getElementById("eyeIcon");
+      const isPass = inp.type === "password";
+      inp.type = isPass ? "text" : "password";
+      icon.innerHTML = isPass
+        ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+        : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+    });
+
+    // Login
+    const loginBtn = document.getElementById("loginBtn");
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const orig = loginBtn.innerHTML;
+      loginBtn.innerHTML = '<span class="spinner"></span> Signing in...';
+      loginBtn.classList.add("btn-loading");
+      document.getElementById("loginError").textContent = "";
+
+      try {
+        // fetch CSRF cookie before login POST
+        await fetch(`/api/csrf/`, { credentials: "include" });
+
+        const headers = { "Content-Type": "application/json" };
+        const csrfToken = getCookie("csrftoken");
+        if (csrfToken) headers["X-CSRFToken"] = csrfToken;
+        const res = await fetch(`/api/login/`, {
+          method: "POST",
+          credentials: "include",
+          headers,
+          body: JSON.stringify({
+            username: document.getElementById("username").value.trim(),
+            password: document.getElementById("password").value,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          document.getElementById("loginError").textContent = data.error || "Login failed.";
+          loginBtn.innerHTML = orig;
+          loginBtn.classList.remove("btn-loading");
+          return;
+        }
+        sessionStorage.setItem("ecc_admin_user", data.user?.username || document.getElementById("username").value.trim());
+        showToast("Login successful. Redirecting…", "success");
+        setTimeout(() => { window.location.replace("{% url 'portal-dashboard' %}"); }, 1200);
+      } catch {
+        document.getElementById("loginError").textContent = "Cannot connect to backend.";
+        loginBtn.innerHTML = orig;
+        loginBtn.classList.remove("btn-loading");
+      }
+    });
+
+    redirectIfAuthenticated();
+  </script>
+</body>
+</html>

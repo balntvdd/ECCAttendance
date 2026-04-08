@@ -1,0 +1,232 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ECC Attendance | Student Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+</head>
+<body>
+  <div id="toastContainer" class="toast-container"></div>
+
+  <div class="student-page">
+    <nav class="student-topnav fade-in">
+      <a href="{% url 'home' %}" class="btn btn-ghost btn-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back
+      </a>
+      <a href="{% url 'portal-login' %}" class="btn btn-ghost btn-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Admin Login
+      </a>
+    </nav>
+
+    <div class="student-center">
+      <header class="student-header">
+        <div class="chip chip-blue" style="margin-bottom:18px;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="11" height="11"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+          Student Portal
+        </div>
+        <h1>Register once. Generate a secure QR pass every session.</h1>
+        <p>Your attendance identity is tied to your student account and verified device. If you use a different device, just verify with OTP and continue generating your QR pass.</p>
+        <div class="student-chips">
+          <span class="chip">One-time registration</span>
+          <span class="chip">Verified by OTP</span>
+          <span class="chip">Session-based QR pass</span>
+        </div>
+          
+      </header>
+
+      <!-- Tab bar -->
+      <div style="display:flex;justify-content:center;margin-bottom:28px;">
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="register-panel">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+            Register
+          </button>
+          <button class="tab-btn" data-tab="qr-panel">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Get QR Pass
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Register Panel ── -->
+      <div id="register-panel" class="tab-pane active">
+        <div class="student-workspace">
+          <div class="glass-card student-main-card">
+            <div class="student-main-header">
+              <div>
+                <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.13em;text-transform:uppercase;color:var(--blue-400);margin-bottom:6px;">Student Registration</div>
+                <h2 style="font-size:1.4rem;font-weight:800;">Create your attendance identity</h2>
+              </div>
+            </div>
+
+            <form id="registerForm" class="student-form-stack">
+              <div class="field-group">
+                <label class="field-label" for="student_id">Student ID</label>
+                <input type="text" id="student_id" maxlength="10" placeholder="e.g. 2024006969">
+              </div>
+              <div class="field-group">
+                <label class="field-label">Full Name</label>
+                <div class="form-row">
+                  <input type="text" id="firstName" placeholder="First Name">
+                  <input type="text" id="middleInitial" placeholder="MI" maxlength="3">
+                </div>
+              </div>
+              <div class="field-group">
+                <div class="form-row">
+                  <input type="text" id="lastName" placeholder="Last Name">
+                  <input type="text" id="suffix" placeholder="Jr./Sr./III" maxlength="10">
+                </div>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="section">Section</label>
+                <select id="section">
+                  <option value="">Select your section</option>
+                  <option>WMD-1A</option><option>WMD-1B</option><option>WMD-1C</option>
+                  <option>WMD-2A</option><option>WMD-2B</option><option>WMD-2C</option>
+                  <option>BSIT-3A</option><option>BSIT-3B</option>
+                  <option>BSIT-4A</option><option>BSIT-4B</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="email">Gmail Address (UA ACCOUNT)</label>
+                <input type="email" id="email" placeholder="your.email@gmail.com" required>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="favorite_teacher">Favorite Teacher</label>
+                <input type="text" id="favorite_teacher" placeholder="e.g. Mr. Smith">
+              </div>
+              <button type="submit" class="btn btn-primary btn-full" id="registerBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                Register Student
+              </button>
+            </form>
+
+            <!-- Already Registered State -->
+            <div id="alreadyRegistered" class="student-form-stack" hidden style="text-align: center; padding: 6rem 2rem 2rem; justify-content: flex-start; align-items: center; gap: 3rem; min-height: auto;">
+              <div style="margin-bottom: 0;">
+                <svg class="floating-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 4rem; height: 4rem; color: var(--success); margin: 0 auto 1rem;">
+                  <circle cx="12" cy="12" r="10"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="8" x2="12" y2="16"/>
+                </svg>
+                <h3 style="font-size: 1.5rem; font-weight: 800; color: var(--success); margin-bottom: 0;">You are already registered!</h3>
+              </div>
+              <div style="display: flex; gap: 1.5rem; flex-direction: column; width: 100%; max-width: 340px; margin: 0 auto;">
+                <a href="{% url 'student-dashboard' %}" class="btn btn-primary" style="margin-top: 1.5rem;">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                  </svg>
+                  View Dashboard
+                </a>
+                <button type="button" class="btn btn-secondary" onclick="switchToQrPanel()">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 0.5rem;">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                  </svg>
+                  Generate QR Pass
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <aside class="student-side-rail">
+            <div class="glass-card side-info-card">
+              <div class="side-card-header">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span class="side-card-label">How It Works</span>
+              </div>
+              <h4>Fast and secure flow</h4>
+              <div class="step-list">
+                <div class="step-item"><div class="step-num">1</div><div class="step-text">Register once using your official student details.</div></div>
+                <div class="step-item"><div class="step-num">2</div><div class="step-text">Your registration is tied securely to your account and device fingerprint.</div></div>
+                <div class="step-item"><div class="step-num">3</div><div class="step-text">Generate a fresh QR pass when your teacher opens a session.</div></div>
+              </div>
+            </div>
+            <div class="glass-card side-info-card">
+              <div class="side-card-header">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span class="side-card-label">Security Note</span>
+              </div>
+              <h4>Device verification</h4>
+              <p>Your student account is linked to a device fingerprint. Use OTP verification when switching devices to continue generating your QR pass.</p>
+            </div>
+            <div class="glass-card side-info-card">
+              <div class="side-card-header">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span class="side-card-label">Need help?</span>
+              </div>
+              <p>Registered on another device? If you lost your registered device or want to use a new one, click <a href="#" id="deviceHelpLink" class="info-link">Learn More</a>.</p>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <!-- ── QR Panel ── -->
+      <div id="qr-panel" class="tab-pane">
+        <div class="student-workspace">
+          <div class="glass-card student-main-card">
+            <div class="student-main-header">
+              <div>
+                <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.13em;text-transform:uppercase;color:var(--blue-400);margin-bottom:6px;">QR Pass Generator</div>
+                <h2 style="font-size:1.4rem;font-weight:800;">Generate your attendance pass</h2>
+              </div>
+            </div>
+
+            <div class="qr-panel-grid">
+              <form id="qrForm" class="student-form-stack">
+                <div class="field-group">
+                  <label class="field-label" for="session_code">Session Code</label>
+                  <input type="text" id="session_code" placeholder="Enter session code from teacher">
+                </div>
+                <div class="field-group">
+                  <label class="field-label" for="qr_student_id">Student ID</label>
+                  <input type="text" id="qr_student_id" placeholder="Enter your Student ID">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full" id="generateQrBtn">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                  Generate QR Pass
+                </button>
+
+                <p class="form-info-text">If you're on a different device, use the <a href="#" id="qrHelpLink" class="info-link">Learn more</a> link to verify by OTP and continue.</p>
+              </form>
+
+              <div class="qr-display" id="qrDisplay">
+                <div class="qr-empty">
+                  <div class="qr-empty-frame">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                  </div>
+                  <p>Your QR pass will appear here after generation.</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <aside class="student-side-rail">
+            <div class="glass-card side-info-card">
+              <div class="side-card-header">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span class="side-card-label">What You Need</span>
+              </div>
+              <h4>Just 2 simple steps</h4>
+              <div class="step-list">
+                <div class="step-item"><div class="step-num">①</div><div class="step-text">Enter session code from your teacher.</div></div>
+                <div class="step-item"><div class="step-num">②</div><div class="step-text">Enter your Student ID. If you're on a new device, verify with OTP when prompted.</div></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+    </div><!-- /student-center -->
+  </div><!-- /student-page -->
+
+  <script>const API_BASE = '';</script>
+  <script src="{% static 'js/student-portal.js' %}"></script>
+</body>
+</html>
