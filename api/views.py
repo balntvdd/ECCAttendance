@@ -697,7 +697,7 @@ def student_login(request):
     if student.device_fingerprint != device_fingerprint:
         return Response({"error": "This student account is already registered on another device."}, status=409)
 
-    # Successful login returns the registered student payload to the frontend.
+    # Successful login returns the registered student payload and stored keys to the frontend.
     return Response(
         {
             "message": "Login successful",
@@ -708,6 +708,8 @@ def student_login(request):
                 "section": student.section,
                 "email": student.email,
             },
+            "private_key": student.private_key,
+            "public_key": student.public_key,
         },
         status=200,
     )

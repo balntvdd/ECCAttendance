@@ -44,8 +44,8 @@ function getCookie(name) {
 }
 // Set a cookie for storing registration, keys, and UI state.
 function setCookie(name, value, days = 365) {
-  // Note: this function expects a Date object to be available as `d`.
-  // It sets an expiration date for the cookie and writes a same-site cookie.
+  // Create a new expiration date for the cookie and write a same-site cookie.
+  const d = new Date();
   d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
   document.cookie = `${name}=${value};expires=${d.toUTCString()};path=/;SameSite=Lax`;
 }
