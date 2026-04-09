@@ -1,6 +1,7 @@
 // Student portal behavior (migrated from inline template)
-// Expects `API_BASE` to be defined on the page (small inline var in the template).
+// Expects `API_BASE` to be defined on the page as a relative or absolute base URL.
 
+// Show a toast notification message in the student portal UI.
 function showToast(msg, type = "info") {
   const c = document.getElementById("toastContainer");
   const t = document.createElement("div");
@@ -16,6 +17,7 @@ function showToast(msg, type = "info") {
   const tid = setTimeout(() => removeToast(t), 5000);
   t._tid = tid;
 }
+// Remove a toast notification and clean up its timer.
 function removeToast(t) {
   if (!t || !t.parentElement) return;
   clearTimeout(t._tid);
@@ -23,7 +25,7 @@ function removeToast(t) {
   setTimeout(() => t.remove(), 280);
 }
 
-// Tabs
+// Tab navigation for the unregistered student portal UI.
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -33,40 +35,56 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
   });
 });
 
-// Register
+// Register form and cookie helper functions used throughout the portal.
 const registerBtn = document.getElementById("registerBtn");
 function getCookie(name) {
   const v = `; ${document.cookie}`;
   const p = v.split(`; ${name}=`);
   return p.length === 2 ? p.pop().split(";").shift() : "";
 }
+// Set a cookie for storing registration, keys, and UI state.
+function setCookie(name, value, days = 365) {
+  // Note: this function expects a Date object to be available as `d`.
+  // It sets an expiration date for the cookie and writes a same-site cookie.
+  d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+  document.cookie = `${name}=${value};expires=${d.toUTCString()};path=/;SameSite=Lax`;
+}
 
 // Device fingerprint generation and management
+// Generate a device fingerprint from browser/hardware properties.
+// Used to recognize the same device across browsers.
 function generateDeviceFingerprint() {
-  let deviceId = localStorage.getItem("ecc_device_fingerprint");
-  if (!deviceId) {
-    // Generate UUID v4 as device fingerprint
-    deviceId = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === "x" ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-    localStorage.setItem("ecc_device_fingerprint", deviceId);
-  }
-  return deviceId;
+  // Always compute fresh from hardware properties to ensure consistency across browsers
+  const fingerprint = [
+    navigator.platform || "",
+    screen.width + 'x' + screen.height,
+    screen.availWidth + 'x' + screen.availHeight,
+    screen.colorDepth || "",
+    screen.pixelDepth || "",
+    navigator.hardwareConcurrency || "",
+    navigator.maxTouchPoints || "",
+    new Date().getTimezoneOffset(),
+    screen.orientation ? screen.orientation.type : "",
+    !!window.sessionStorage,
+    !!window.localStorage,
+    !!window.indexedDB,
+  ].join('|');
+  return btoa(fingerprint).replace(/[^a-zA-Z0-9]/g, '').substr(0, 32);
 }
 
 function getStoredDeviceFingerprint() {
-  return localStorage.getItem("ecc_device_fingerprint") || generateDeviceFingerprint();
+  return generateDeviceFingerprint();
 }
 
+// Clear all stored student session cookies and temporary session storage.
 function clearStudentSessionData() {
-  localStorage.removeItem("ecc_registration_data");
-  localStorage.removeItem("ecc_device_fingerprint");
-  localStorage.removeItem("ecc_private_key");
+  setCookie("ecc_registration_data", "");
+  setCookie("ecc_private_key", "");
+  setCookie("ecc_public_key", "");
   sessionStorage.clear();
 }
 
+// Stop QR refresh and countdown timers when the student session becomes invalid.
 function stopQrRefresh() {
   if (qrRefreshInterval) {
     clearInterval(qrRefreshInterval);
@@ -78,10 +96,13 @@ function stopQrRefresh() {
   }
 }
 
+// Handle backend responses for deleted or invalid student accounts.
+// Clears stored registration state and forces the student back to the register form.
 function handleDeletedStudentResponse(res, data) {
   const errorText = data && data.error ? String(data.error).toLowerCase() : "";
   if (
     res.status === 404 ||
+    (data && data.reset_registration) ||
     errorText.includes("student not found") ||
     errorText.includes("invalid user") ||
     errorText.includes("unauthorized")
@@ -95,13 +116,14 @@ function handleDeletedStudentResponse(res, data) {
   return false;
 }
 
+// Verify that the stored student ID still exists in the backend on page load.
 async function verifyStoredStudentOnLoad(studentId) {
   try {
     const res = await fetch(`${API_BASE}/api/check-student/?student_id=${encodeURIComponent(studentId)}`, {
       credentials: "include",
     });
     const data = await res.json();
-    if (!res.ok) {
+    if (!res.ok || (data && data.exists === false)) {
       handleDeletedStudentResponse(res, data);
       return false;
     }
@@ -112,6 +134,7 @@ async function verifyStoredStudentOnLoad(studentId) {
   }
 }
 
+// Handle submission of the student registration form, including frontend validation.
 document.getElementById("registerForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const orig = registerBtn.innerHTML;
@@ -140,14 +163,32 @@ document.getElementById("registerForm").addEventListener("submit", async (e) => 
   }
 
   const deviceFingerprint = generateDeviceFingerprint();
+  const newStudentId = document.getElementById("student_id").value.trim();
+  
+  // Scenario 3: Check if this device already has a registered student
+  const existingRegistrationStr = getCookie("ecc_registration_data");
+  if (existingRegistrationStr) {
+    try {
+      const existingReg = JSON.parse(existingRegistrationStr);
+      if (existingReg.student_id && existingReg.student_id !== newStudentId) {
+        // Device has a registration for a different student ID
+        showToast("This device already has a registered account. Registration is not allowed.", "error");
+        registerBtn.innerHTML = orig; registerBtn.classList.remove("btn-loading");
+        return;
+      }
+    } catch (err) {
+      // Ignore parsing errors
+    }
+  }
+  
   const payload = {
-    student_id: document.getElementById("student_id").value.trim(),
+    student_id: newStudentId,
     name: fullName,
     email: email,
     section: document.getElementById("section").value,
-    favorite_teacher: document.getElementById("favorite_teacher").value.trim(),
     device_fingerprint: deviceFingerprint,
   };
+
   try {
     // Fetch CSRF token before POST
     await fetch(`${API_BASE}/api/csrf/`, { credentials: "include" });
@@ -162,19 +203,91 @@ document.getElementById("registerForm").addEventListener("submit", async (e) => 
       credentials: "include",
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (err) {
+      const text = await res.text().catch(() => "Unable to parse backend response.");
+      data = { error: text || "Unable to parse backend response." };
+    }
+
+    // Scenario 1: Same device, same credentials, different browser - store and show registered UI
+    if (res.ok && data.already_registered) {
+      // Store registration data for this browser's cookies
+      const registrationData = {
+        student_id: payload.student_id,
+        device_fingerprint: deviceFingerprint,
+      };
+      setCookie("ecc_registration_data", JSON.stringify(registrationData));
+      
+      // Store keys for this browser
+      if (data.private_key) {
+        setCookie("ecc_private_key", data.private_key);
+      }
+      if (data.public_key) {
+        setCookie("ecc_public_key", data.public_key);
+      }
+      
+      const registerForm = document.getElementById("registerForm");
+      const alreadyRegistered = document.getElementById("alreadyRegistered");
+      if (registerForm) {
+        registerForm.style.display = "none";
+        registerForm.hidden = true;
+      }
+      if (alreadyRegistered) {
+        alreadyRegistered.style.display = "block";
+        alreadyRegistered.hidden = false;
+      }
+      const headerH1 = document.querySelector('.student-header h1');
+      const headerP = document.querySelector('.student-header p');
+      if (headerH1) headerH1.textContent = 'Welcome back! Generate your attendance QR pass.';
+      if (headerP) headerP.textContent = 'Your registration is complete. Simply enter a session code to generate a fresh QR pass for attendance.';
+      const successTitle = document.querySelector('#alreadyRegistered h3');
+      if (successTitle) successTitle.textContent = 'You are already registered';
+      
+      // Hide tab bar completely
+      document.querySelector('.tab-bar').style.display = 'none';
+      
+      // Hide all tab panes except register-panel
+      document.querySelectorAll('.tab-pane').forEach(pane => {
+        if (pane.id === 'register-panel') {
+          pane.classList.add('active');
+        } else {
+          pane.classList.remove('active');
+        }
+      });
+      
+      // Pre-populate QR panel with student ID (for when they navigate to QR)
+      document.getElementById("qr_student_id").value = payload.student_id;
+      
+      showToast("Welcome back! Your account has been recognized.", "success");
+      registerBtn.innerHTML = orig; registerBtn.classList.remove("btn-loading");
+      return;
+    }
+
+    // Scenario 2: Student already registered on another device
     if (!res.ok) {
-      showToast(data.error || "Registration failed.", "error");
-      registerBtn.innerHTML = orig; registerBtn.classList.remove("btn-loading"); return;
+      const errorMsg = data.error || "Registration failed.";
+      showToast(errorMsg, "error");
+      registerBtn.innerHTML = orig; registerBtn.classList.remove("btn-loading");
+      return;
     }
     
     // Store registration data for device recognition
     const registrationData = {
       student_id: payload.student_id,
-      favorite_teacher: payload.favorite_teacher,
       device_fingerprint: deviceFingerprint,
     };
-    localStorage.setItem("ecc_registration_data", JSON.stringify(registrationData));
+    setCookie("ecc_registration_data", JSON.stringify(registrationData));
+    
+    // Store private key locally for signing operations
+    if (data.private_key) {
+      setCookie("ecc_private_key", data.private_key);
+    }
+    if (data.public_key) {
+      setCookie("ecc_public_key", data.public_key);
+    }
     
     // Switch to registered state immediately after successful registration
     // Hide tab bar completely
@@ -208,7 +321,7 @@ document.getElementById("registerForm").addEventListener("submit", async (e) => 
   }
 });
 
-// QR Generate - with automatic 30-second refresh
+// QR Generate - with automatic 15-second refresh
 const generateQrBtn = document.getElementById("generateQrBtn");
 let qrRefreshInterval = null;
 let qrCountdownInterval = null;
@@ -231,10 +344,19 @@ document.getElementById("qrForm").addEventListener("submit", async (e) => {
   }
   
   const deviceFingerprint = getStoredDeviceFingerprint();
+  const privateKey = getCookie("ecc_private_key");
+  
+  if (!privateKey) {
+    showToast("Private key not found. Please register again.", "error");
+    generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
+    return;
+  }
+  
   const payload = {
     session_code: sessionCode,
     student_id: studentId,
     device_fingerprint: deviceFingerprint,
+    private_key: privateKey,
   };
   
   try {
@@ -253,11 +375,10 @@ document.getElementById("qrForm").addEventListener("submit", async (e) => {
     });
     const data = await res.json();
     
-    // Handle device mismatch - trigger OTP verification
-    if (res.status === 403 && data.device_mismatch) {
-      showToast("Device verification required. An OTP has been sent to your email.", "warning");
+    // Handle device mismatch - show modal
+    if (res.status === 403 && data.show_modal) {
+      showToast(data.modal_message, "error");
       generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
-      showOTPModal(studentId, deviceFingerprint, sessionCode, data.masked_email);
       return;
     }
     
@@ -284,10 +405,10 @@ document.getElementById("qrForm").addEventListener("submit", async (e) => {
     displayQrCode(data);
     generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
 
-    // Set up auto-refresh every 30 seconds
+    // Set up auto-refresh every 15 seconds
     qrRefreshInterval = setInterval(() => {
       refreshQrCode(studentId, sessionCode, deviceFingerprint);
-    }, 30000);
+    }, 15000);
   } catch {
     showToast(`Cannot connect to backend`, "error");
     generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
@@ -298,18 +419,12 @@ const qrHelpLink = document.getElementById("qrHelpLink");
 if (qrHelpLink) {
   qrHelpLink.addEventListener("click", (e) => {
     e.preventDefault();
-    const studentId = document.getElementById("qr_student_id").value.trim();
-    const sessionCode = document.getElementById("session_code").value.trim().toUpperCase();
-    if (!studentId || !sessionCode) {
-      showToast("Please enter your Student ID and Session Code first.", "error");
-      return;
-    }
-    const deviceFingerprint = getStoredDeviceFingerprint();
-    showOTPModal(studentId, deviceFingerprint, sessionCode, null);
+    const studentId = document.getElementById("qr_student_id")?.value.trim() || "";
+    showDeviceHelpModal(studentId);
   });
 }
 
-// Display QR code with timestamp and countdown timer
+// Render the generated QR code and countdown UI after backend QR generation.
 function displayQrCode(data) {
   const qrDisplay = document.getElementById("qrDisplay");
   qrDisplay.innerHTML = "";
@@ -332,7 +447,7 @@ function displayQrCode(data) {
       <div style="color: var(--slate-400); margin-bottom: 4px;">Generated: ${generatedText}</div>
       <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="color: var(--blue-400);"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span id="qrCountdown" style="font-weight: 600; color: var(--blue-400);">30s</span>
+        <span id="qrCountdown" style="font-weight: 600; color: var(--blue-400);">15s</span>
         <span style="color: var(--slate-400);">until refresh</span>
       </div>
     `;
@@ -348,7 +463,7 @@ function displayQrCode(data) {
 
     const note = document.createElement("p");
     note.className = "qr-note";
-    note.textContent = "QR pass auto-refreshes every 30 seconds for security. Present this to the teacher scanner for attendance.";
+    note.textContent = "QR pass auto-refreshes every 15 seconds for security. Present this to the teacher scanner for attendance.";
     wrap.appendChild(note);
 
     qrDisplay.appendChild(wrap);
@@ -359,9 +474,9 @@ function displayQrCode(data) {
   });
 }
 
-// Countdown timer
+// Start the 15-second countdown for the rendered QR pass.
 function startCountdownTimer() {
-  let seconds = 30;
+  let seconds = 15;
   
   if (qrCountdownInterval) clearInterval(qrCountdownInterval);
   
@@ -384,17 +499,24 @@ function startCountdownTimer() {
   }, 1000);
 }
 
-// Refresh QR code
+// Refresh the QR code automatically every 15 seconds using the stored private key.
 async function refreshQrCode(studentId, sessionCode, deviceFingerprint) {
   try {
     const headers = { "Content-Type": "application/json" };
     const csrfToken = getCookie("csrftoken");
     if (csrfToken) headers["X-CSRFToken"] = csrfToken;
 
+    const privateKey = getCookie("ecc_private_key");
+    if (!privateKey) {
+      showToast("Private key not found. Please register again.", "error");
+      return;
+    }
+
     const payload = {
       session_code: sessionCode,
       student_id: studentId,
       device_fingerprint: deviceFingerprint,
+      private_key: privateKey,
     };
 
     const res = await fetch(`${API_BASE}/api/generate-qr/`, {
@@ -412,237 +534,11 @@ async function refreshQrCode(studentId, sessionCode, deviceFingerprint) {
 
     displayQrCode(data);
   } catch (err) {
-    console.log("QR refresh: Connection error (will retry in 30s)");
+    console.log("QR refresh: Connection error (will retry in 15s)");
   }
 }
 
-// OTP Modal and verification with favorite teacher
-function showOTPModal(studentId, deviceFingerprint, sessionCode, maskedEmail) {
-  // Create modal HTML with two-step verification
-  const modalHTML = `
-    <div class="otp-modal-overlay" id="otpOverlay">
-      <div class="otp-modal">
-        <div class="otp-modal-header">
-          <h3>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="display:inline-block; margin-right:8px; vertical-align:middle;">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v4"/>
-            </svg>
-            Verify Device
-          </h3>
-          <button type="button" class="otp-modal-close" onclick="closeOTPModal()">×</button>
-        </div>
-        <div class="otp-modal-body">
-          <div id="otpStep1" style="display:block;">
-            <p id="otpMessage" style="margin-bottom:24px; color: var(--text-300);">Enter your registered Google account and favorite teacher to send a verification code.</p>
-            <form id="otpStep1Form">
-              <div class="field-group">
-                <label class="field-label" for="otp_email">Registered Gmail Address</label>
-                <input type="email" id="otp_email" placeholder="your.email@ua.edu" autocomplete="email">
-              </div>
-              <div class="field-group">
-                <label class="field-label" for="otp_favorite_teacher">Favorite Teacher</label>
-                <input type="text" id="otp_favorite_teacher" placeholder="e.g. Mr. Smith" autocomplete="off">
-              </div>
-              <button type="submit" class="btn btn-primary" id="otpSendBtn" style="margin-top:16px;">
-                Send verification code
-              </button>
-            </form>
-          </div>
-          <div id="otpStep2" style="display:none;">
-            <p id="otpSentMessage" style="margin-bottom:24px; color: var(--text-300);">A code has been sent to your registered email. Enter it below to verify your device.</p>
-            <form id="otpStep2Form" style="display:block;">
-              <div class="field-group">
-                <label class="field-label" for="otp_code">Verification Code</label>
-                <input type="text" id="otp_code" placeholder="000000" maxlength="6" autocomplete="one-time-code" style="font-family: 'Courier New', monospace; font-size: 1.4rem; letter-spacing: 0.25em; text-align: center; font-weight:700;">
-              </div>
-              <button type="submit" class="btn btn-primary" id="otpVerifyBtn" style="margin-top:16px;">
-                Verify code and continue
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  document.body.insertAdjacentHTML("beforeend", modalHTML);
-  
-  let otpCodeValue = ""; // Store OTP code between steps
-  let savedFavoriteTeacher = "";
-  
-  async function requestOTP(email, favoriteTeacher) {
-    try {
-      const headers = { "Content-Type": "application/json" };
-      const csrfToken = getCookie("csrftoken");
-      if (csrfToken) headers["X-CSRFToken"] = csrfToken;
-      
-      const res = await fetch(`${API_BASE}/api/generate-otp/`, {
-        method: "POST",
-        headers: headers,
-        credentials: "include",
-        body: JSON.stringify({
-          student_id: studentId,
-          device_fingerprint: deviceFingerprint,
-          email: email,
-          favorite_teacher: favoriteTeacher,
-        }),
-      });
-      
-      let data;
-      try {
-        data = await res.json();
-      } catch (jsonErr) {
-        console.warn("generate-otp response JSON parse failed", jsonErr);
-        data = { error: `Server returned ${res.status}` };
-      }
-      const messageEl = document.getElementById("otpMessage");
-      const step1El = document.getElementById("otpStep1");
-      const step2El = document.getElementById("otpStep2");
-      const otpSentMessage = document.getElementById("otpSentMessage");
-      
-      if (!res.ok) {
-        if (handleDeletedStudentResponse(res, data)) {
-          return;
-        }
-        messageEl.textContent = data.error || `Failed to send verification code (${res.status}). Please try again.`;
-        messageEl.style.color = "var(--error, #ef4444)";
-        return;
-      }
-      
-      // For testing: log the OTP code to console
-      if (data.otp_code) {
-        console.log(`OTP Code for testing: ${data.otp_code}`);
-      }
-      
-      savedFavoriteTeacher = favoriteTeacher;
-      messageEl.textContent = `A code has been sent to ${data.masked_email || email}. Enter it below.`;
-      messageEl.style.color = "var(--text-300)";
-      step1El.style.display = "none";
-      step2El.style.display = "block";
-      otpSentMessage.textContent = `A code has been sent to ${data.masked_email || email}. Enter it below to continue.`;
-      document.getElementById("otp_code").focus();
-    } catch (err) {
-      const messageEl = document.getElementById("otpMessage");
-      messageEl.textContent = "Connection error. Please try again.";
-      messageEl.style.color = "var(--error, #ef4444)";
-    }
-  }
-  
-  document.getElementById("otpStep1Form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = document.getElementById("otp_email").value.trim();
-    const favoriteTeacher = document.getElementById("otp_favorite_teacher").value.trim();
-    
-    if (!email || !favoriteTeacher) {
-      showToast("Please enter your registered email and your favorite teacher.", "error");
-      return;
-    }
-    
-    const sendBtn = document.getElementById("otpSendBtn");
-    const origText = sendBtn.innerHTML;
-    sendBtn.innerHTML = '<span class="spinner"></span> Sending…';
-    sendBtn.disabled = true;
-    
-    await requestOTP(email, favoriteTeacher);
-    sendBtn.innerHTML = origText;
-    sendBtn.disabled = false;
-  });
-  
-  document.getElementById("otpStep2Form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const otpCode = document.getElementById("otp_code").value.trim();
-    
-    if (otpCode.length !== 6 || !/^\d+$/.test(otpCode)) {
-      showToast("OTP must be 6 digits.", "error");
-      return;
-    }
-    
-    const verifyBtn = document.getElementById("otpVerifyBtn");
-    const origText = verifyBtn.innerHTML;
-    verifyBtn.innerHTML = '<span class="spinner"></span> Verifying…';
-    verifyBtn.disabled = true;
-    
-    try {
-      const headers = { "Content-Type": "application/json" };
-      const csrfToken = getCookie("csrftoken");
-      if (csrfToken) headers["X-CSRFToken"] = csrfToken;
-      
-      const res = await fetch(`${API_BASE}/api/verify-otp/`, {
-        method: "POST",
-        headers: headers,
-        credentials: "include",
-        body: JSON.stringify({
-          student_id: studentId,
-          device_fingerprint: deviceFingerprint,
-          otp_code: otpCode,
-          favorite_teacher: savedFavoriteTeacher,
-        }),
-      });
-      
-      let data;
-      try {
-        data = await res.json();
-      } catch (jsonErr) {
-        console.warn("verify-otp response JSON parse failed", jsonErr);
-        data = { error: `Server returned ${res.status}` };
-      }
-      if (!res.ok) {
-        if (handleDeletedStudentResponse(res, data)) {
-          verifyBtn.innerHTML = origText;
-          verifyBtn.disabled = false;
-          return;
-        }
-        let errorMsg = data.error || "Verification failed.";
-        if (data.attempts_left !== undefined) {
-          errorMsg += ` (${data.attempts_left} attempts remaining)`;
-        }
-        showToast(errorMsg, "error");
-        verifyBtn.innerHTML = origText;
-        verifyBtn.disabled = false;
-        return;
-      }
-      
-      showToast(data.message || "Device verified successfully! You can now generate the QR pass.", "success");
-
-      // Only update device fingerprint in localStorage if permanently bound
-      if (!data.temporary_authorization) {
-        try {
-          const registrationDataStr = localStorage.getItem("ecc_registration_data");
-          const registrationData = registrationDataStr ? JSON.parse(registrationDataStr) : null;
-          if (registrationData && registrationData.student_id === studentId) {
-            registrationData.device_fingerprint = deviceFingerprint;
-            localStorage.setItem("ecc_registration_data", JSON.stringify(registrationData));
-          } else {
-            localStorage.setItem(
-              "ecc_registration_data",
-              JSON.stringify({
-                student_id: studentId,
-                favorite_teacher: savedFavoriteTeacher,
-                device_fingerprint: deviceFingerprint,
-              })
-            );
-          }
-        } catch (e) {
-          console.warn("Failed to update localStorage:", e);
-        }
-      }
-
-      closeOTPModal();
-    } catch (err) {
-      showToast("Connection error during verification.", "error");
-      verifyBtn.innerHTML = origText;
-      verifyBtn.disabled = false;
-    }
-  });
-}
-
-function closeOTPModal() {
-  const overlay = document.getElementById("otpOverlay");
-  if (overlay) {
-    overlay.remove();
-  }
-}
-
+// Open a help modal with instructions for students who need to register a new device.
 function showDeviceHelpModal(studentId) {
   const modalHTML = `
     <div class="otp-modal-overlay" id="deviceHelpOverlay">
@@ -678,6 +574,7 @@ function showDeviceHelpModal(studentId) {
   document.body.insertAdjacentHTML("beforeend", modalHTML);
 }
 
+// Close the device help modal overlay.
 function closeDeviceHelpModal() {
   const overlay = document.getElementById("deviceHelpOverlay");
   if (overlay) {
@@ -685,9 +582,181 @@ function closeDeviceHelpModal() {
   }
 }
 
-// Check registration status on page load
+// Show the student login modal for existing registered accounts.
+function showLoginModal() {
+  const modalHTML = `
+    <div class="otp-modal-overlay" id="loginModalOverlay" style="opacity: 0; transition: opacity 0.3s ease;">
+      <div class="otp-modal" style="max-width: 420px; transform: scale(0.9); transition: transform 0.3s ease;">
+        <div class="otp-modal-header">
+          <h3>Student Login</h3>
+          <button type="button" class="otp-modal-close" onclick="closeLoginModal()">×</button>
+        </div>
+        <div class="otp-modal-body" style="padding: 1rem 1.25rem;">
+          <p style="margin:0 0 1.5rem; color: var(--text-300); line-height:1.6; text-align: center;">
+            Enter your registered student details to continue.
+          </p>
+          <form id="loginForm" class="student-form-stack">
+            <div class="field-group">
+              <label class="field-label" for="login_student_id">Student ID</label>
+              <input type="text" id="login_student_id" maxlength="10" placeholder="e.g. 2024006969">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="login_section">Section</label>
+              <select id="login_section">
+                <option value="">Select your section</option>
+                <option>WMD-1A</option><option>WMD-1B</option><option>WMD-1C</option>
+                <option>WMD-2A</option><option>WMD-2B</option><option>WMD-2C</option>
+                <option>BSIT-3A</option><option>BSIT-3B</option>
+                <option>BSIT-4A</option><option>BSIT-4B</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full" id="loginBtn">
+              Log in
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML("beforeend", modalHTML);
+  const overlay = document.getElementById("loginModalOverlay");
+  const modal = overlay.querySelector('.otp-modal');
+  setTimeout(() => {
+    overlay.style.opacity = '1';
+    modal.style.transform = 'scale(1)';
+  }, 10);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeLoginModal();
+  });
+  document.addEventListener("keydown", handleLoginModalEscape);
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const orig = loginBtn.innerHTML;
+    loginBtn.innerHTML = '<span class="spinner"></span> Logging in…';
+    loginBtn.classList.add("btn-loading");
+
+    const studentId = document.getElementById("login_student_id").value.trim();
+    const section = document.getElementById("login_section").value;
+    const deviceFingerprint = generateDeviceFingerprint();
+
+    if (!studentId || !section) {
+      showToast("Please enter both Student ID and Section.", "error");
+      loginBtn.innerHTML = orig; loginBtn.classList.remove("btn-loading");
+      return;
+    }
+
+    const payload = {
+      student_id: studentId,
+      section: section,
+      device_fingerprint: deviceFingerprint,
+    };
+
+    try {
+      // Fetch CSRF token before POST
+      await fetch(`${API_BASE}/api/csrf/`, { credentials: "include" });
+
+      const headers = { "Content-Type": "application/json" };
+      const csrfToken = getCookie("csrftoken");
+      if (csrfToken) headers["X-CSRFToken"] = csrfToken;
+
+      const res = await fetch(`${API_BASE}/api/student-login/`, {
+        method: "POST", 
+        headers: headers,
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.error || "Login failed.", "error");
+        loginBtn.innerHTML = orig; loginBtn.classList.remove("btn-loading");
+        return;
+      }
+
+      // Success
+      handleLoginSuccess(data, deviceFingerprint);
+      closeLoginModal();
+      showToast("Login successful! Welcome back.", "success");
+    } catch {
+      showToast("Cannot connect to backend", "error");
+      loginBtn.innerHTML = orig; loginBtn.classList.remove("btn-loading");
+    }
+  });
+}
+
+// Close the login modal and remove keyboard event listeners.
+function closeLoginModal() {
+  const overlay = document.getElementById("loginModalOverlay");
+  if (overlay) {
+    const modal = overlay.querySelector('.otp-modal');
+    overlay.style.opacity = '0';
+    modal.style.transform = 'scale(0.9)';
+    setTimeout(() => overlay.remove(), 300);
+  }
+  document.removeEventListener("keydown", handleLoginModalEscape);
+}
+
+function handleLoginModalEscape(e) {
+  if (e.key === "Escape") closeLoginModal();
+}
+
+// Apply login success state to the UI and store student registration details locally.
+function handleLoginSuccess(data, deviceFingerprint) {
+  // Store registration data for this browser's cookies
+  const registrationData = {
+    student_id: data.student.student_id,
+    device_fingerprint: deviceFingerprint,
+  };
+  setCookie("ecc_registration_data", JSON.stringify(registrationData));
+  
+  // Store keys for this browser
+  if (data.private_key) {
+    setCookie("ecc_private_key", data.private_key);
+  }
+  if (data.public_key) {
+    setCookie("ecc_public_key", data.public_key);
+  }
+  
+  const registerForm = document.getElementById("registerForm");
+  const alreadyRegistered = document.getElementById("alreadyRegistered");
+  if (registerForm) {
+    registerForm.style.display = "none";
+    registerForm.hidden = true;
+  }
+  if (alreadyRegistered) {
+    alreadyRegistered.style.display = "block";
+    alreadyRegistered.hidden = false;
+  }
+  const headerH1 = document.querySelector('.student-header h1');
+  const headerP = document.querySelector('.student-header p');
+  if (headerH1) headerH1.textContent = 'Welcome back! Generate your attendance QR pass.';
+  if (headerP) headerP.textContent = 'Your registration is complete. Simply enter a session code to generate a fresh QR pass for attendance.';
+  const successTitle = document.querySelector('#alreadyRegistered h3');
+  if (successTitle) successTitle.textContent = 'You are already registered';
+  
+  // Hide tab bar completely
+  document.querySelector('.tab-bar').style.display = 'none';
+  
+  // Hide all tab panes except register-panel
+  document.querySelectorAll('.tab-pane').forEach(pane => {
+    if (pane.id === 'register-panel') {
+      pane.classList.add('active');
+    } else {
+      pane.classList.remove('active');
+    }
+  });
+  
+  // Pre-populate QR panel with student ID
+  document.getElementById("qr_student_id").value = data.student.student_id;
+  
+  // Hide login prompt
+  const loginPrompt = document.querySelector('#loginLink')?.parentElement;
+  if (loginPrompt) loginPrompt.style.display = 'none';
+}
+
+// Check the saved registration state on page load and update the UI accordingly.
 async function checkRegistrationStatus() {
-  const registrationDataStr = localStorage.getItem("ecc_registration_data");
+  const registrationDataStr = getCookie("ecc_registration_data");
   
   // Default state: show registration form only, hide device-locked state
   const registerForm = document.getElementById("registerForm");
@@ -708,7 +777,7 @@ async function checkRegistrationStatus() {
   const headerH1 = document.querySelector('.student-header h1');
   const headerP = document.querySelector('.student-header p');
   if (headerH1) headerH1.textContent = 'Register once. Generate a secure QR pass every session.';
-  if (headerP) headerP.textContent = 'Your attendance identity is tied to your student account and verified device. If you switch devices, verify with OTP to continue.';
+  if (headerP) headerP.textContent = 'Your attendance identity is tied to your student account and verified device. If you switch devices, contact support to register on a new device.';
   
   if (!registrationDataStr) return;
   
@@ -759,12 +828,10 @@ async function checkRegistrationStatus() {
       document.getElementById("qr_student_id").value = registrationData.student_id;
     }
   } catch (e) {
-    // Invalid data, clear it and stay in unregistered state
-    localStorage.removeItem("ecc_registration_data");
   }
 }
 
-// Switch to QR panel
+// Show the QR panel directly when a registered student navigates to it.
 function switchToQrPanel() {
   // For registered students, tabs are hidden, so directly show QR panel
   document.querySelectorAll('.tab-pane').forEach(pane => {
@@ -779,7 +846,7 @@ function switchToQrPanel() {
   window.scrollTo(0, 0);
 }
 
-// Initialize on page load
+// Initialize student portal UI and event handlers when the page loads.
 document.addEventListener("DOMContentLoaded", async () => {
   // Clear temporary authorization on page refresh
   try {
@@ -798,11 +865,24 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   await checkRegistrationStatus();
 
+  // Add login prompt below register button
+  const registerBtn = document.getElementById("registerBtn");
+  if (registerBtn) {
+    const loginPrompt = document.createElement("div");
+    loginPrompt.style.cssText = "text-align: center; margin-top: 16px; font-size: 0.875rem; color: var(--text-300);";
+    loginPrompt.innerHTML = 'Already registered? <a href="#" id="loginLink" style="font-weight: 600; color: var(--blue-400); text-decoration: none; cursor: pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">Log in</a>';
+    registerBtn.parentNode.insertBefore(loginPrompt, registerBtn.nextSibling);
+    document.getElementById("loginLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      showLoginModal();
+    });
+  }
+
   const deviceHelpLink = document.getElementById("deviceHelpLink");
   if (deviceHelpLink) {
     deviceHelpLink.addEventListener("click", (e) => {
       e.preventDefault();
-      const registrationDataStr = localStorage.getItem("ecc_registration_data");
+      const registrationDataStr = getCookie("ecc_registration_data");
       let studentId = document.getElementById("qr_student_id")?.value.trim() || "";
       if (registrationDataStr) {
         try {

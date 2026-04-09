@@ -34,14 +34,14 @@ class AttendancePortalTests(TestCase):
             "name": "Juan Dela Cruz",
             "section": "WMD-1A",
             "email": "juan@example.com",
-            "favorite_teacher": "Mr. Smith",
             "device_fingerprint": "test-device-123",
         }
         first_response = self.client.post(reverse("register-student"), payload, format="json")
         second_response = self.client.post(reverse("register-student"), payload, format="json")
 
         self.assertEqual(first_response.status_code, 200)
-        self.assertEqual(second_response.status_code, 400)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertTrue(second_response.data.get("already_registered"))
         self.assertEqual(Student.objects.count(), 1)
 
     def test_only_staff_can_create_session(self):

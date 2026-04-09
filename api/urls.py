@@ -6,8 +6,6 @@ from .views import (
     export_attendance_report,
     generate_qr,
     validate_qr,
-    generate_otp,
-    verify_otp,
     check_student_exists,
     list_sessions,
     list_students,
@@ -17,20 +15,19 @@ from .views import (
     session_dashboard,
     session_report,
     start_session,
+    student_login,
     verify_attendance,
     student_attendance,
     student_attendance_full,
-    clear_temp_auth,
 )
 
 urlpatterns = [
     path("login/", api_login, name="api-login"),
     path("logout/", api_logout, name="api-logout"),
     path("register/", register_student, name="register-student"),
+    path("student-login/", student_login, name="student-login"),
     path("generate-qr/", generate_qr, name="generate-qr"),
     path("validate-qr/", validate_qr, name="validate-qr"),
-    path("generate-otp/", generate_otp, name="generate-otp"),
-    path("verify-otp/", verify_otp, name="verify-otp"),
     path("check-student/", check_student_exists, name="check-student"),
     path("start-session/", start_session, name="start-session"),
     path("verify-attendance/", verify_attendance, name="verify-attendance"),
@@ -43,5 +40,4 @@ urlpatterns = [
     path("session-report/<str:session_code>/", session_report, name="session-report"),
     path("student-attendance/", student_attendance, name="student-attendance"),
     path("student-attendance-full/", student_attendance_full, name="student-attendance-full"),
-    path("clear-temp-auth/", clear_temp_auth, name="clear-temp-auth"),
 ]

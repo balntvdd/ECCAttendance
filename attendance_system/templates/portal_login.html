@@ -58,8 +58,11 @@
   </div>
 
   <script>
+    // Use a relative API base so the login page works on the same backend origin
+    // regardless of deployment host or port.
     const API_BASE = '';
 
+    // Simple cookie reader used to collect CSRF and session cookies.
     function getCookie(name) {
       const v = `; ${document.cookie}`;
       const p = v.split(`; ${name}=`);
@@ -88,6 +91,8 @@
       setTimeout(() => t.remove(), 280);
     }
 
+    // If the admin already has an authenticated session, redirect them
+    // directly to the dashboard without showing the login form.
     async function redirectIfAuthenticated() {
       try {
         const res = await fetch(`/api/portal-bootstrap/`, {
@@ -114,7 +119,7 @@
         : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
     });
 
-    // Login
+    // Handle login form submit and forward credentials to the backend.
     const loginBtn = document.getElementById("loginBtn");
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();

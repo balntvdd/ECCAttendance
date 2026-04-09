@@ -3,7 +3,6 @@ import csv
 import io
 import json
 import re
-import secrets
 import string
 from urllib.parse import unquote
 
@@ -20,9 +19,11 @@ from rest_framework.permissions import BasePermission, IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt #add
 
-from .models import Attendance, SECTION_CHOICES, Session, Student, OTPVerification
-from .utils import generate_keys, sign_message, verify_signature, send_otp_email, send_otp_email_async
+from .models import Attendance, SECTION_CHOICES, Session, Student
+from .utils import generate_keys, sign_message, verify_signature
 
+# API view implementations for student registration, login, QR generation,
+# attendance reporting, and portal dashboard features.
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import inch
@@ -33,15 +34,18 @@ except Exception:
     canvas = None
 
 
+# Permission class used by staff-only API views.
 class IsStaffUser(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
 
 
+# Decorator for portal view functions that require staff login.
 def staff_required(view_func):
     return login_required(user_passes_test(lambda user: user.is_staff, login_url="/portal/login/")(view_func))
 
 
+# Convert a Session model instance into a JSON-friendly payload for APIs.
 def serialize_session(session):
     schedule_info = session.get_schedule_info()
     return {
@@ -64,6 +68,7 @@ def serialize_session(session):
     }
 
 
+# Filter session queryset by request GET params for section/date.
 def get_filtered_sessions(request):
     sessions = Session.objects.all()
     section = request.GET.get("section")
@@ -76,6 +81,7 @@ def get_filtered_sessions(request):
     return sessions
 
 
+# Build a summary payload for a session including present/late/absent counts.
 def build_session_summary(session):
     students = Student.objects.filter(section=session.section).order_by("student_id")
     attendance_map = {
@@ -128,6 +134,7 @@ def build_session_summary(session):
     }
 
 
+# Render attendance summary rows for CSV/PDF export.
 def render_report_rows(summary):
     rows = []
     for key in ("present", "late", "absent"):
@@ -150,6 +157,7 @@ def render_report_rows(summary):
     return rows
 
 
+# Parse section code into readable course/year/section details.
 def parse_section_details(section):
     match = re.match(r"^(?P<course>[A-Z]+)-(?P<year>\d)(?P<section>[A-Z])$", section or "")
     if not match:
@@ -175,6 +183,7 @@ def parse_section_details(section):
     }
 
 
+# Convert a Student model into a structured payload for staff lists and exports.
 def serialize_student(student):
     section_details = parse_section_details(student.section)
     return {
@@ -190,6 +199,7 @@ def serialize_student(student):
     }
 
 
+# Build a simple PDF document from text lines for fallback attendance exports.
 def build_basic_pdf(lines, title="Attendance Report"):
     def escape_pdf_text(value):
         return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
@@ -265,21 +275,25 @@ def build_basic_pdf(lines, title="Attendance Report"):
     return pdf.getvalue()
 
 
+# Render the staff login page for portal access.
 def portal_login_view(request):
     if request.user.is_authenticated and request.user.is_staff:
         return redirect("portal-dashboard")
     return render(request, "portal_login.html", {"sections": SECTION_CHOICES})
 
 
+# Render the staff dashboard page for attendance management.
 @staff_required
 def portal_dashboard_view(request):
     return render(request, "portal_dashboard.html", {"sections": SECTION_CHOICES})
 
 
+# Render the student-facing portal page, which loads the student JS app.
 def student_dashboard_view(request):
     return render(request, "student_dashboard.html", {"sections": SECTION_CHOICES})
 
 
+# API endpoint for student attendance summary data used by the student dashboard.
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def student_attendance(request):
@@ -348,7 +362,6 @@ def student_attendance(request):
             "student_id": student.student_id,
             "name": student.name,
             "section": student.section,
-            "favorite_teacher": student.favorite_teacher,
             "device_fingerprint": student.device_fingerprint,
             "registered_at": student.registered_at.isoformat(),
         },
@@ -364,6 +377,7 @@ def student_attendance(request):
     })
 
 
+# API endpoint providing the full attendance history for a student with optional filters.
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def student_attendance_full(request):
@@ -429,14 +443,17 @@ def student_attendance_full(request):
     })
 
 
+# Entry view for the student portal application.
 def student_portal_view(request):
     return render(request, "student.html", {"sections": SECTION_CHOICES})
 
 
+# Render the public landing page for the attendance system.
 def landing_view(request):
     """Render the public landing page (index)."""
     return render(request, "index.html", {"sections": SECTION_CHOICES})
 
+# API endpoint for staff user login from the portal.
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -462,6 +479,7 @@ def api_login(request):
     )
 
 
+# API endpoint for logging staff users out of the portal session.
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -470,6 +488,7 @@ def api_logout(request):
     return Response({"success": True})
 
 
+# API endpoint used by frontend code to verify whether a student ID still exists.
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def check_student_exists(request):
@@ -478,13 +497,20 @@ def check_student_exists(request):
         return Response({"error": "Student ID is required"}, status=400)
 
     try:
-        Student.objects.get(student_id=student_id)
+        student = Student.objects.get(student_id=student_id)
+        return Response({
+            "exists": True,
+            "student_id": student.student_id,
+            "name": student.name,
+            "section": student.section,
+            "email": student.email
+        })
     except Student.DoesNotExist:
-        return Response({"error": "Student not found"}, status=404)
-
-    return Response({"exists": True, "student_id": student_id})
+        return Response({"exists": False, "student_id": student_id})
 
 
+# API bootstrap endpoint for the staff portal front end.
+# Returns current session and user diagnostics for staff pages.
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def portal_bootstrap(request):
@@ -526,6 +552,7 @@ def portal_bootstrap(request):
     return Response(payload)
 
 
+# Debug endpoint to inspect request cookies, session contents, and headers.
 @api_view(["GET", "POST"]) 
 @permission_classes([AllowAny])
 def debug_request(request):
@@ -545,6 +572,8 @@ def debug_request(request):
     )
 
 
+# API endpoint for student registration from the student portal.
+# Validates device fingerprint, student details, and creates a Student record.
 @api_view(["POST"])
 @csrf_exempt
 @permission_classes([AllowAny])
@@ -553,18 +582,13 @@ def register_student(request):
     name = request.data.get("name", "").strip()
     email = str(request.data.get("email", "")).strip().lower()
     section = request.data.get("section")
-    favorite_teacher = str(request.data.get("favorite_teacher", "")).strip()
     device_fingerprint = str(request.data.get("device_fingerprint", "")).strip()
 
-    if not all([student_id, name, section, favorite_teacher]):
-        return Response({"error": "Student ID, full name, section, and favorite teacher are required"}, status=400)
+    if not all([student_id, name, section]):
+        return Response({"error": "Student ID, full name, and section are required"}, status=400)
 
     if not device_fingerprint:
         return Response({"error": "Device fingerprint is required for device binding security"}, status=400)
-
-    # Validate favorite teacher field
-    if len(favorite_teacher) < 2 or len(favorite_teacher) > 100:
-        return Response({"error": "Favorite teacher name must be between 2 and 100 characters"}, status=400)
 
     allowed_sections = [item[0] for item in SECTION_CHOICES]
     if section not in allowed_sections:
@@ -573,18 +597,43 @@ def register_student(request):
     if not re.match(r"^\d{1,10}$", student_id):
         return Response({"error": "Student ID must be numeric and up to 10 digits"}, status=400)
 
-    if Student.objects.filter(student_id=student_id).exists():
-        return Response({"error": "Student is already registered"}, status=400)
-
-    # Normalize and check for duplicate names
     def normalize_name(n):
-        return " ".join(n.upper().split())
-    
+        # Normalize names for consistent comparison across registration/login.
+        return re.sub(r'[^\w\s]', '', " ".join(n.upper().split()))
+
+    # Check if device fingerprint is already registered to a different student
+    existing_device_student = Student.objects.filter(device_fingerprint=device_fingerprint).first()
+    if existing_device_student and existing_device_student.student_id != student_id:
+        return Response({"error": "This device already has a registered account."}, status=409)
+
+    # If student ID exists, verify that the details match the existing record.
+    # Otherwise reject duplicate registration attempts with inconsistent data.
+    existing_student = Student.objects.filter(student_id=student_id).first()
+    if existing_student:
+        same_name = normalize_name(existing_student.name) == normalize_name(name)
+        same_section = existing_student.section == section
+        same_email = (existing_student.email or "").lower() == email.lower()
+
+        if same_name and same_section and same_email:
+            return Response(
+                {
+                    "message": "Student already registered",
+                    "already_registered": True,
+                    "student": {
+                        "student_id": existing_student.student_id,
+                        "name": existing_student.name,
+                        "section": existing_student.section,
+                        "email": existing_student.email,
+                    },
+                },
+                status=200,
+            )
+        return Response({"error": "Student ID already exists with different registered details."}, status=409)
+
     normalized_input_name = normalize_name(name)
-    if Student.objects.values_list('name', flat=True).exists():
-        for existing_student in Student.objects.all():
-            if normalize_name(existing_student.name) == normalized_input_name:
-                return Response({"error": "A student with this name is already registered"}, status=400)
+    for existing_student in Student.objects.all():
+        if normalize_name(existing_student.name) == normalized_input_name:
+            return Response({"error": "This student is already registered on another device"}, status=409)
 
     if len(name) < 3 or re.search(r"\d", name):
         return Response({"error": "Enter a valid full name"}, status=400)
@@ -604,7 +653,6 @@ def register_student(request):
         public_key=public_key,
         private_key=private_key,
         device_fingerprint=device_fingerprint,
-        favorite_teacher=favorite_teacher,
     )
 
     return Response(
@@ -615,11 +663,59 @@ def register_student(request):
                 "name": student.name,
                 "section": student.section,
             },
+            "private_key": private_key,
+            "public_key": public_key,
         }
     )
 
 
 
+# API endpoint used by the student portal login modal.
+# Verifies student credentials and device fingerprint before granting access.
+@api_view(["POST"])
+@csrf_exempt
+@permission_classes([AllowAny])
+def student_login(request):
+    student_id = str(request.data.get("student_id", "")).strip()
+    section = request.data.get("section")
+    device_fingerprint = str(request.data.get("device_fingerprint", "")).strip()
+
+    if not all([student_id, section]):
+        return Response({"error": "Student ID and section are required"}, status=400)
+
+    if not device_fingerprint:
+        return Response({"error": "Device fingerprint is required"}, status=400)
+
+    try:
+        student = Student.objects.get(student_id=student_id)
+    except Student.DoesNotExist:
+        return Response({"error": "Student account not found."}, status=404)
+
+    if student.section != section:
+        return Response({"error": "Student account not found."}, status=404)
+
+    if student.device_fingerprint != device_fingerprint:
+        return Response({"error": "This student account is already registered on another device."}, status=409)
+
+    # Successful login returns the registered student payload to the frontend.
+    return Response(
+        {
+            "message": "Login successful",
+            "already_registered": True,
+            "student": {
+                "student_id": student.student_id,
+                "name": student.name,
+                "section": student.section,
+                "email": student.email,
+            },
+        },
+        status=200,
+    )
+
+
+
+# API endpoint for staff to create a new attendance session.
+# Generates a unique session code and stores session schedule details.
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsStaffUser])
@@ -660,6 +756,7 @@ def start_session(request):
     return Response({"message": "Session created", "session": serialize_session(session)})
 
 
+# API endpoint for staff to fetch a filtered list of sessions.
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsStaffUser])
 def list_sessions(request):
@@ -667,6 +764,7 @@ def list_sessions(request):
     return Response({"sessions": [serialize_session(session) for session in sessions]})
 
 
+# API endpoint for staff to search and list registered students.
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsStaffUser])
 def list_students(request):
@@ -688,6 +786,7 @@ def list_students(request):
     )
 
 
+# API endpoint for staff dashboard data, including session summaries and totals.
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsStaffUser])
 def session_dashboard(request):
@@ -714,6 +813,7 @@ def session_dashboard(request):
     )
 
 
+# API endpoint to generate a signed attendance QR payload for a registered student.
 @api_view(["POST"])
 @csrf_exempt
 @permission_classes([AllowAny])
@@ -721,25 +821,35 @@ def generate_qr(request):
     student_id = str(request.data.get("student_id", "")).strip()
     session_code = str(request.data.get("session_code", "")).strip().upper()
     device_fingerprint = str(request.data.get("device_fingerprint", "")).strip()
+    private_key = str(request.data.get("private_key", "")).strip()
 
     if not all([student_id, session_code]):
         return Response({"error": "Session code and student ID are required"}, status=400)
 
+    if not private_key:
+        return Response({"error": "Private key is required for QR generation"}, status=400)
+
     try:
         student = Student.objects.get(student_id=student_id)
     except Student.DoesNotExist:
-        return Response({"error": "Student not found"}, status=404)
+        return Response(
+            {
+                "error": "Student account not found. Please register again.",
+                "reset_registration": True,
+            },
+            status=404
+        )
 
-    # Device binding check
+    # Device binding check ensures the current browser/device matches the registered fingerprint.
     if student.device_fingerprint and student.device_fingerprint != device_fingerprint:
         # Check if temporarily authorized for this session
         if request.session.get('temp_authorized_student_id') != student.student_id:
-            # Device mismatch - trigger OTP verification
+            # Device not recognized - show modal
             return Response(
                 {
-                    "error": "Device mismatch",
-                    "device_mismatch": True,
-                    "message": "This device is not registered. OTP verification required.",
+                    "show_modal": True,
+                    "modal_message": "This account is not recognized on this device.",
+                    "error": "Device not recognized",
                 },
                 status=403
             )
@@ -750,18 +860,13 @@ def generate_qr(request):
     if student.section != session.section:
         return Response({"error": "Student section does not match the selected session"}, status=400)
 
-    # Use the server-side private key associated with this registered student.
-    private_key = student.private_key
-    if not private_key:
-        return Response({"error": "Server-side key not available for QR generation."}, status=500)
-
     timestamp = timezone.now().isoformat()
     message = f"{student_id}|{student.section}|{session.session_code}|{timestamp}"
 
     try:
         signature = sign_message(private_key, message)
     except Exception:
-        return Response({"error": "QR generation failed due to invalid server key"}, status=500)
+        return Response({"error": "QR generation failed due to invalid private key"}, status=400)
 
     raw_payload = f"{student_id}|{student.section}|{session.session_code}|{timestamp}|{signature}"
     return Response(
@@ -776,16 +881,30 @@ def generate_qr(request):
     )
 
 
+# API endpoint to validate QR payload freshness and integrity.
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def validate_qr(request):
-    """Validate that QR code is not older than 30 seconds (anti-screenshot)."""
+    """Validate that QR code is not older than 15 seconds (anti-screenshot)."""
     raw_payload = str(request.data.get("raw_payload", "")).strip()
     student_id = str(request.data.get("student_id", "")).strip()
     
     if not raw_payload or not student_id:
         return Response({"error": "QR payload and student ID are required"}, status=400)
+    
+    # Check if student still exists
+    try:
+        Student.objects.get(student_id=student_id)
+    except Student.DoesNotExist:
+        return Response(
+            {
+                "valid": False,
+                "error": "Student account not found. Please register again.",
+                "reset_registration": True,
+            },
+            status=400
+        )
     
     # Parse the payload: student_id|section|session_code|timestamp|signature
     try:
@@ -806,18 +925,18 @@ def validate_qr(request):
         current_time = timezone.now()
         time_diff = (current_time - qr_timestamp).total_seconds()
         
-        # QR code must be fresher than 30 seconds
-        if time_diff > 30:
+        # QR code must be fresher than 15 seconds
+        if time_diff > 15:
             return Response(
                 {
                     "valid": False,
-                    "error": "QR code has expired. Please generate a new one.",
+                    "error": "QR code has expired. Please generate a fresh QR pass.",
                     "age_seconds": int(time_diff),
                 },
                 status=400
             )
         
-        seconds_remaining = 30 - int(time_diff)
+        seconds_remaining = 15 - int(time_diff)
         return Response(
             {
                 "valid": True,
@@ -833,185 +952,16 @@ def validate_qr(request):
         )
 
 
-@csrf_exempt
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def generate_otp(request):
-    """Generate OTP for device binding verification and send via email."""
-    try:
-        student_id = str(request.data.get("student_id", "")).strip()
-        device_fingerprint = str(request.data.get("device_fingerprint", "")).strip()
-
-        if not student_id or not device_fingerprint:
-            return Response({"error": "Student ID and device fingerprint are required"}, status=400)
-
-        try:
-            student = Student.objects.get(student_id=student_id)
-        except Student.DoesNotExist:
-            return Response({"error": "Student not found"}, status=404)
-        
-        if not student.email:
-            return Response(
-                {"error": "Student email not found. Please register with your email address first."},
-                status=400
-            )
-
-        email = str(request.data.get("email", "")).strip().lower()
-        favorite_teacher = str(request.data.get("favorite_teacher", "")).strip()
-
-        if not email or not favorite_teacher:
-            return Response(
-                {"error": "Email and favorite teacher are required to send the verification code."},
-                status=400
-            )
-
-        if student.email.strip().lower() != email:
-            return Response(
-                {"error": "The email does not match the registered account."},
-                status=400
-            )
-
-        if not student.favorite_teacher or student.favorite_teacher.strip().lower() != favorite_teacher.strip().lower():
-            return Response(
-                {"error": "Favorite teacher does not match our records."},
-                status=400
-            )
-
-        # Generate a 6-digit OTP
-        otp_code = "".join(secrets.choice(string.digits) for _ in range(6))
-        
-        # Create OTP record with 2-minute expiry
-        expires_at = timezone.now() + timezone.timedelta(minutes=2)
-        otp_obj = OTPVerification.objects.create(
-            student=student,
-            device_fingerprint=device_fingerprint,
-            otp_code=otp_code,
-            expires_at=expires_at,
-        )
-
-        # Send OTP via email in a background thread so the request stays responsive.
-        send_otp_email_async(student.email, student.name, otp_code)
-
-        try:
-            masked_email = f"{student.email[:2]}***@{student.email.split('@')[1]}"
-        except Exception:
-            masked_email = student.email
-
-        response_data = {
-            "message": "OTP has been sent to your registered email address",
-            "otp_id": otp_obj.id,
-            "expires_in_seconds": 120,
-            "masked_email": masked_email,
-        }
-
-        if settings.DEBUG:
-            response_data["otp_code"] = otp_code  # For local development and testing
-        
-        return Response(response_data)
-    except Exception as exc:
-        import traceback
-        traceback.print_exc()
-        return Response(
-            {
-                "error": "Server error generating OTP.",
-                "details": str(exc) if settings.DEBUG else "Internal server error",
-            },
-            status=500,
-        )
 
 
-@csrf_exempt
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def verify_otp(request):
-    """Verify OTP and favorite teacher, then temporarily authorize device for current session."""
-    student_id = str(request.data.get("student_id", "")).strip()
-    device_fingerprint = str(request.data.get("device_fingerprint", "")).strip()
-    otp_code = str(request.data.get("otp_code", "")).strip()
-    favorite_teacher = str(request.data.get("favorite_teacher", "")).strip()
-
-    if not all([student_id, device_fingerprint, otp_code, favorite_teacher]):
-        return Response({"error": "Student ID, device fingerprint, OTP code, and favorite teacher are required"}, status=400)
-
-    if not re.match(r"^\d{6}$", otp_code):
-        return Response({"error": "OTP must be a 6-digit number"}, status=400)
-
-    try:
-        student = Student.objects.get(student_id=student_id)
-    except Student.DoesNotExist:
-        return Response({"error": "Student not found"}, status=404)
-
-    # Find OTP record for this device
-    otp_obj = OTPVerification.objects.filter(
-        student=student,
-        device_fingerprint=device_fingerprint,
-    ).first()
-
-    if not otp_obj:
-        return Response({"error": "No OTP request found for this device"}, status=400)
-
-    # Check if OTP is expired
-    if otp_obj.is_expired():
-        otp_obj.delete()
-        return Response(
-            {"error": "OTP has expired. Please request a new one."},
-            status=400
-        )
-
-    # Check attempt limit
-    if otp_obj.attempt_count >= 5:
-        otp_obj.delete()
-        return Response(
-            {"error": "Too many failed attempts. Please request a new OTP."},
-            status=429
-        )
-
-    # Check if OTP code matches
-    if otp_obj.otp_code != otp_code:
-        otp_obj.attempt_count += 1
-        otp_obj.save()
-        
-        attempts_left = 5 - otp_obj.attempt_count
-        return Response(
-            {
-                "error": "Invalid OTP code",
-                "attempts_left": attempts_left,
-            },
-            status=400
-        )
-
-    # OTP verified - now check favorite teacher
-    if not student.favorite_teacher or favorite_teacher.strip().lower() != student.favorite_teacher.strip().lower():
-        return Response(
-            {"error": "Favorite teacher does not match. Device verification failed."},
-            status=400
-        )
-
-    # Both OTP and favorite teacher verified - temporarily authorize device for this session
-    otp_obj.verified = True
-    otp_obj.save()
-    
-    # Set temporary session authorization (DO NOT bind device permanently)
-    request.session['temp_authorized_student_id'] = student.student_id
-
-    return Response(
-        {
-            "message": "Device temporarily authorized for this session",
-            "student_id": student.student_id,
-            "temporary_authorization": True,
-        }
-    )
 
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def clear_temp_auth(request):
-    """Clear temporary authorization on page refresh."""
-    if 'temp_authorized_student_id' in request.session:
-        del request.session['temp_authorized_student_id']
-    return Response({"message": "Temporary authorization cleared"})
 
 
+
+
+
+# API endpoint used by staff devices to verify and record QR attendance scans.
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsStaffUser])
@@ -1056,11 +1006,11 @@ def verify_attendance(request):
 
     now = timezone.localtime()
     
-    # Check if QR is within 30 seconds (anti-screenshot system)
+    # Check if QR is within 15 seconds (anti-screenshot system)
     qr_age_seconds = (now - qr_time).total_seconds()
     if qr_age_seconds < -5:  # Allow 5 seconds of clock skew
         return Response({"error": "QR timestamp is in the future. Check device clock."}, status=400)
-    if qr_age_seconds > 30:
+    if qr_age_seconds > 15:
         return Response(
             {
                 "error": "QR code has expired. Please generate a fresh QR pass.",
@@ -1150,6 +1100,7 @@ def verify_attendance(request):
     )
 
 
+# Helper to format names for export output as 'SURNAME, FIRSTNAME'.
 def format_name_surname_first(full_name):
     """Convert 'FIRSTNAME MIDDLE LASTNAME [SUFFIX]' to 'LASTNAME, FIRSTNAME'"""
     if not full_name:
@@ -1172,6 +1123,7 @@ def format_name_surname_first(full_name):
     return f"{surname}, {firstname}"
 
 
+# Helper to extract surname for sorting exported attendance rows.
 def extract_surname_for_sorting(full_name):
     """Extract surname from name for alphabetical sorting"""
     if not full_name:
@@ -1189,6 +1141,7 @@ def extract_surname_for_sorting(full_name):
     return parts[-1] if parts else ""
 
 
+# Endpoint to export attendance reports as CSV or PDF for staff users.
 def export_attendance_report(request):
     if request.method != "GET":
         return JsonResponse({"detail": 'Method "%s" not allowed.' % request.method}, status=405)
@@ -1315,6 +1268,7 @@ def export_attendance_report(request):
     return response
 
 
+# API endpoint to retrieve a summary report for a specific session.
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsStaffUser])
 def session_report(request, session_code):

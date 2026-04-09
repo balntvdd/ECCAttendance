@@ -6,6 +6,7 @@ from django.db import models
 from django.utils import timezone
 
 
+# Choices used for student section selection in registration and admin views.
 SECTION_CHOICES = [
     ("WMD-1A", "WMD-1A"),
     ("WMD-1B", "WMD-1B"),
@@ -32,14 +33,21 @@ def generate_session_code(subject=None):
 
 
 class Student(models.Model):
+    # Unique student identifier used for portal registration and QR generation.
     student_id = models.CharField(max_length=50, unique=True)
+    # Full registered student name.
     name = models.CharField(max_length=100)
+    # Optional email captured during registration.
     email = models.EmailField(blank=True, null=True)
+    # Section choice used to match sessions and student attendance.
     section = models.CharField(max_length=10, choices=SECTION_CHOICES)
+    # Public key used to verify QR signatures during attendance validation.
     public_key = models.TextField()
+    # Stored private key for this student when initially registered.
     private_key = models.TextField(null=True, blank=True)
+    # Device fingerprint used to enforce device-based registration/login.
     device_fingerprint = models.CharField(max_length=255, null=True, blank=True)
-    favorite_teacher = models.CharField(max_length=100, null=True, blank=True)
+    # Timestamp when the student record was created.
     registered_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
@@ -219,23 +227,3 @@ class Attendance(models.Model):
         return f"{self.student.student_id} - {self.session.session_code}"
 
 
-class OTPVerification(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="otp_verifications")
-    device_fingerprint = models.CharField(max_length=255)
-    otp_code = models.CharField(max_length=6)
-    attempt_count = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    verified = models.BooleanField(default=False)
-
-    class Meta:
-        ordering = ("-created_at",)
-
-    def __str__(self):
-        return f"OTP for {self.student.student_id} - {self.device_fingerprint[:16]}"
-    
-    def is_expired(self):
-        return timezone.now() > self.expires_at
-    
-    def is_valid(self):
-        return not self.is_expired() and not self.verified and self.attempt_count < 5

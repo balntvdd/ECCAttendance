@@ -137,15 +137,26 @@ function renderSessions(sessions) {
   if (!sessionTableBody) return;
   sessionTableBody.innerHTML = "";
   if (!sessions.length) {
-    sessionTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:28px;color:var(--text-500);">No sessions available.</td></tr>`;
+    sessionTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text-500);">No sessions available.</td></tr>`;
     return;
   }
   sessions.forEach(s => {
+    const timeStatus = s.time_status || s.status;
+    const statusLabel = timeStatus === "LATE_WINDOW" ? "Late Window" :
+                        timeStatus === "TIMED_OUT" ? "Timed Out" :
+                        timeStatus === "ENDED" ? "Ended" :
+                        timeStatus === "CLOSED" ? "Closed" : "Active";
+    const statusColor = timeStatus === "ACTIVE" ? "var(--success-400)" :
+                        timeStatus === "LATE_WINDOW" ? "var(--warning-400)" :
+                        timeStatus === "TIMED_OUT" ? "var(--error-400)" :
+                        timeStatus === "ENDED" ? "var(--text-600)" : "var(--text-500)";
+    
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="td-primary">${s.session_code}</td>
       <td>${s.section}</td><td>${s.subject}</td><td>${s.date}</td>
-      <td>${s.time_in_start} – ${s.time_out_start}</td>`;
+      <td>${s.time_in_start} – ${s.time_out_start}</td>
+      <td><span style="color:${statusColor};font-weight:600;font-size:0.8125rem;">${statusLabel}</span></td>`;
     sessionTableBody.appendChild(tr);
   });
 }
@@ -170,15 +181,33 @@ function renderSummary(summary) {
     return;
   }
   titleEl.textContent = `${summary.session.session_code} | ${summary.session.section}`;
-  statusEl.textContent = `${summary.session.subject} · ${summary.session.status}`;
+  
+  // Get status badge with time-based status
+  const timeStatus = summary.session.time_status || summary.session.status;
+  const statusLabel = timeStatus === "LATE_WINDOW" ? "Late Window" :
+                      timeStatus === "TIMED_OUT" ? "Timed Out" :
+                      timeStatus === "ENDED" ? "Ended" : "Active";
+  const statusStyle = timeStatus === "ACTIVE" ? "color:var(--success-400);" :
+                      timeStatus === "LATE_WINDOW" ? "color:var(--warning-400);" :
+                      timeStatus === "TIMED_OUT" ? "color:var(--error-400);" :
+                      timeStatus === "ENDED" ? "color:var(--text-600);" : "";
+  statusEl.innerHTML = `<span style="font-size:0.75rem;opacity:0.8;">${summary.session.subject}</span><span style="${statusStyle}font-weight:600;margin-left:8px;">${statusLabel}</span>`;
+  
   presentEl.textContent = summary.counts.present;
   lateEl.textContent    = summary.counts.late;
   absentEl.textContent  = summary.counts.absent;
 
+  // Enhanced session metadata with schedule information
+  const schedule = summary.session.schedule || {};
   metaEl.innerHTML = `
     <div class="detail-row"><span class="detail-row-k">Date</span><span class="detail-row-v">${summary.session.date}</span></div>
-    <div class="detail-row"><span class="detail-row-k">Time In</span><span class="detail-row-v">${summary.session.time_in_start} to ${summary.session.time_in_end}</span></div>
-    <div class="detail-row"><span class="detail-row-k">Time Out</span><span class="detail-row-v">${summary.session.time_out_start}</span></div>
+    <div class="detail-row"><span class="detail-row-k">Status</span><span class="detail-row-v" style="${statusStyle}">${statusLabel}</span></div>
+    <div style="border-top:1px solid rgba(255,255,255,0.08);margin:12px 0;"></div>
+    <div class="detail-row"><span class="detail-row-k">Start Time</span><span class="detail-row-v">${schedule.start_time || summary.session.time_in_start}</span></div>
+    <div class="detail-row"><span class="detail-row-k">Attendance Deadline</span><span class="detail-row-v">${schedule.attendance_deadline || summary.session.time_in_end}</span></div>
+    <div class="detail-row"><span class="detail-row-k">Late Cutoff</span><span class="detail-row-v">${schedule.late_cutoff || summary.session.time_out_start}</span></div>
+    <div class="detail-row"><span class="detail-row-k">Final End</span><span class="detail-row-v">${schedule.final_end || '—'}</span></div>
+    <div style="border-top:1px solid rgba(255,255,255,0.08);margin:12px 0;"></div>
     <div class="detail-row"><span class="detail-row-k">Total Students</span><span class="detail-row-v">${summary.counts.total_students}</span></div>`;
 
   absentList.innerHTML = "";
@@ -306,18 +335,58 @@ async function handleSessionCreate(e) {
   };
   try {
     const data = await apiFetch(`${API_BASE}/api/start-session/`, { method: "POST", body: JSON.stringify(payload) });
+    const sessionCode = data.session.session_code;
+    
+    // Update session code display
+    const codeWrapper = document.getElementById("sessionCodeWrapper");
+    const noSessionMessage = document.getElementById("noSessionMessage");
+    const codeValue = document.getElementById("sessionCodeValue");
     const msgEl = document.getElementById("sessionCreationMessage");
     const metaEl = document.getElementById("sessionCreationMeta");
-    if (msgEl) msgEl.textContent = `Created: ${data.session.session_code}`;
+    
+    if (codeWrapper) codeWrapper.style.display = "block";
+    if (noSessionMessage) noSessionMessage.style.display = "none";
+    if (codeValue) codeValue.textContent = sessionCode;
+    if (msgEl) msgEl.textContent = `Created: ${sessionCode}`;
     if (metaEl) metaEl.innerHTML = `
       <div class="detail-row"><span class="detail-row-k">Section</span><span class="detail-row-v">${data.session.section}</span></div>
       <div class="detail-row"><span class="detail-row-k">Subject</span><span class="detail-row-v">${data.session.subject}</span></div>
       <div class="detail-row"><span class="detail-row-k">Window</span><span class="detail-row-v">${data.session.time_in_start} to ${data.session.time_in_start}</span></div>`;
     document.getElementById("sessionForm")?.reset();
-    showToast(`Session ${data.session.session_code} created successfully!`, "success");
+    showToast(`Session ${sessionCode} created successfully!`, "success");
     await loadDashboard();
   } catch (err) { showToast(err.message || "Failed to create session.", "error"); }
   finally { if (btn) { btn.innerHTML = orig; btn.classList.remove("btn-loading"); } }
+}
+
+function copySessionCode() {
+  const codeEl = document.getElementById("sessionCodeValue");
+  const btn = document.getElementById("copySessionCodeBtn");
+  if (!codeEl || !btn) return;
+  
+  const sessionCode = codeEl.textContent.trim();
+  if (!sessionCode || sessionCode === "—") {
+    showToast("No session code to copy", "warning");
+    return;
+  }
+  
+  // Copy to clipboard using modern API
+  navigator.clipboard.writeText(sessionCode).then(() => {
+    // Visual feedback
+    btn.classList.add("copied");
+    const origHTML = btn.innerHTML;
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Copied';
+    
+    showToast("Session code copied to clipboard", "success");
+    
+    // Reset button after 2 seconds
+    setTimeout(() => {
+      btn.classList.remove("copied");
+      btn.innerHTML = origHTML;
+    }, 2000);
+  }).catch(() => {
+    showToast("Failed to copy session code", "error");
+  });
 }
 
 async function processQR(decoded) {
@@ -606,6 +675,7 @@ async function downloadReport(format) {
 
 document.getElementById("refreshDashboardBtn")?.addEventListener("click", loadDashboard);
 document.getElementById("sessionForm")?.addEventListener("submit", handleSessionCreate);
+document.getElementById("copySessionCodeBtn")?.addEventListener("click", copySessionCode);
 document.getElementById("generateReportBtn")?.addEventListener("click", loadReport);
 document.getElementById("downloadCsvBtn")?.addEventListener("click", () => downloadReport("csv"));
 document.getElementById("downloadPdfBtn")?.addEventListener("click", () => downloadReport("pdf"));

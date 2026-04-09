@@ -110,17 +110,17 @@ else:
 
 # Email configuration
 # Always use SMTP in production, only use console backend for local development
-if DEBUG:
-    EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
-else:
-    EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
+#if DEBUG:
+#    EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+#else:
+#    EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
 
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'ECCAttendance@gmail.com')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'cgtwpljgkkbvnxog')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'ECCAttendance <ECCAttendance@gmail.com>')
+#EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+#EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+#EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
+#EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'ECCAttendance@gmail.com')
+#EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', 'cgtwpljgkkbvnxog')
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # optional lang
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -263,19 +263,4 @@ SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_SAVE_EVERY_REQUEST = True
 
-# ────────────────────────────────────────────────────
-# EMAIL CONFIGURATION FOR OTP VERIFICATION
-# ────────────────────────────────────────────────────
-# Configure environment variables:
-# EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-# EMAIL_HOST=smtp.gmail.com
-# EMAIL_PORT=587
-# EMAIL_USE_TLS=True
-# EMAIL_HOST_USER=your-email@gmail.com
-# EMAIL_HOST_PASSWORD=your-app-password
-# DEFAULT_FROM_EMAIL=your-email@gmail.com
 
-# For production with Gmail, use App Password (not regular password)
-# 1. Enable 2FA on Google account
-# 2. Generate App Password at https://myaccount.google.com/apppasswords
-# 3. Set EMAIL_HOST_PASSWORD to the 16-character app password

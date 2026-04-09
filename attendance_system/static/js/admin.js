@@ -102,6 +102,8 @@ function getCookie(name) {
   return p.length === 2 ? p.pop().split(";").shift() : "";
 }
 
+// Wrapper for admin API requests that ensures CSRF tokens are attached for
+// non-GET requests and automatically parses JSON responses.
 async function apiFetch(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   const method = (options.method || "GET").toUpperCase();
@@ -223,6 +225,8 @@ function renderSummary(summary) {
   });
 }
 
+// Bootstrap admin dashboard state when the page initially loads.
+// Loads the authenticated user, available sessions, and initial summary data.
 async function loadBootstrap() {
   const data = await apiFetch(`${API_BASE}/api/portal-bootstrap/`, { method: "GET" });
   const portalUserEl = document.getElementById("portalUser");
