@@ -695,12 +695,7 @@ def student_login(request):
         return Response({"error": "Student account not found."}, status=404)
 
     if student.device_fingerprint != device_fingerprint:
-        # Keep the existing restriction for different accounts on the same device:
-        # if this fingerprint is already owned by another student, block login.
-        existing_device_student = Student.objects.filter(device_fingerprint=device_fingerprint).first()
-        if existing_device_student and existing_device_student.student_id != student.student_id:
-            return Response({"error": "This device already has a registered account."}, status=409)
-        # Otherwise allow same-account login across browser contexts on the same device.
+        return Response({"error": "This student account is already registered on another device."}, status=409)
 
     # Successful login returns the registered student payload and stored keys to the frontend.
     return Response(
