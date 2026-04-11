@@ -80,6 +80,130 @@ function setStoredPublicKey(value) {
   setCookie("ecc_public_key", value);
 }
 
+function arrayBufferToHex(buffer) {
+  return [...new Uint8Array(buffer)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function base64UrlToUint8Array(base64url) {
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, "=");
+  const raw = window.atob(padded);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function generateEccKeyPair() {
+  const keyPair = await window.crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"]
+  );
+  const jwkPrivate = await window.crypto.subtle.exportKey("jwk", keyPair.privateKey);
+
+  const dBytes = base64UrlToUint8Array(jwkPrivate.d);
+  const xBytes = base64UrlToUint8Array(jwkPrivate.x);
+  const yBytes = base64UrlToUint8Array(jwkPrivate.y);
+
+  return {
+    privateKey: arrayBufferToHex(dBytes),
+    publicKey: arrayBufferToHex(xBytes) + arrayBufferToHex(yBytes),
+  };
+}
+
+function clearActivationPrompt() {
+  const section = document.getElementById("browserActivationPrompt");
+  if (section) section.remove();
+}
+
+function renderActivationPrompt(studentId, deviceFingerprint, options = {}) {
+  const container = document.getElementById("alreadyRegistered");
+  if (!container || !studentId) return;
+
+  clearActivationPrompt();
+
+  const message = options.message || "This browser is not registered. Do you want to activate this browser as your device?";
+  const prompt = document.createElement("div");
+  prompt.id = "browserActivationPrompt";
+  prompt.style.cssText = "border:1px solid rgba(15,23,42,.08);padding:1rem 1.1rem;border-radius:16px;background:rgba(255,255,255,.82);box-shadow:0 20px 45px rgba(15,23,42,.06);margin-top:1.25rem;text-align:left;";
+  prompt.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:0.9rem;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px;">
+        <p style="margin:0 0 0.8rem;color:var(--text-700);font-weight:600;">${message}</p>
+        <p style="margin:0;color:var(--text-500);font-size:0.95rem;line-height:1.5;">
+          Activating this browser will generate a fresh signing key pair locally and replace the current authorized device for your account.
+        </p>
+      </div>
+      <button type="button" class="btn btn-primary" id="activateBrowserBtn" style="white-space:nowrap;">Activate this browser</button>
+    </div>
+  `;
+  container.appendChild(prompt);
+
+  const btn = document.getElementById("activateBrowserBtn");
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner"></span> Activating…';
+      try {
+        await activateBrowserForStudent(studentId, deviceFingerprint);
+      } catch (err) {
+        showToast(err.message || "Activation failed. Please try again.", "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    });
+  }
+}
+
+async function activateBrowserForStudent(studentId, deviceFingerprint) {
+  if (!studentId || !deviceFingerprint) {
+    throw new Error("Unable to activate browser because student or device fingerprint is missing.");
+  }
+
+  const keys = await generateEccKeyPair();
+  setStoredPrivateKey(keys.privateKey);
+  setStoredPublicKey(keys.publicKey);
+
+  try {
+    await fetch(`${API_BASE}/api/csrf/`, { credentials: "include" });
+    const headers = { "Content-Type": "application/json" };
+    const csrfToken = getCookie("csrftoken");
+    if (csrfToken) headers["X-CSRFToken"] = csrfToken;
+
+    const res = await fetch(`${API_BASE}/api/activate-browser/`, {
+      method: "POST",
+      headers,
+      credentials: "include",
+      body: JSON.stringify({
+        student_id: studentId,
+        public_key: keys.publicKey,
+        device_fingerprint: deviceFingerprint,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to activate this browser.");
+    }
+
+    clearActivationPrompt();
+    showToast("This browser is now your active device.", "success");
+    return data;
+  } catch (err) {
+    // If activation fails, remove stored keys that were created locally.
+    try {
+      localStorage.removeItem("ecc_private_key");
+      localStorage.removeItem("ecc_public_key");
+    } catch (e) {}
+    setCookie("ecc_private_key", "");
+    setCookie("ecc_public_key", "");
+    throw err;
+  }
+}
+
 // Device fingerprint generation and management
 // Generate a device fingerprint from browser/hardware properties.
 // Used to recognize the same device across browsers.
@@ -446,7 +570,10 @@ document.getElementById("qrForm").addEventListener("submit", async (e) => {
   const privateKey = getStoredPrivateKey();
 
   if (!privateKey) {
-    showToast("Private key not found. Please register again.", "error");
+    showToast("This browser is not registered. Activate this browser to generate a QR pass.", "warning");
+    renderActivationPrompt(studentId, deviceFingerprint, {
+      message: "This browser is not registered. Do you want to activate this browser as your device?",
+    });
     generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
     return;
   }
@@ -819,11 +946,25 @@ function handleLoginSuccess(data, deviceFingerprint) {
   if (data.private_key) {
     setStoredPrivateKey(data.private_key);
   }
-  if (!getStoredPrivateKey()) {
+
+  const hasPrivateKey = !!getStoredPrivateKey();
+  const studentId = data.student.student_id;
+
+  if (!hasPrivateKey) {
     showToast(
-      "This browser does not have your attendance signing key. Use the browser where you first registered to generate QR codes, or contact support for a device reset.",
+      "This browser is not registered. Do you want to activate this browser as your device?",
       "warning"
     );
+    renderActivationPrompt(studentId, deviceFingerprint, {
+      message: "This browser is not registered. Do you want to activate this browser as your device?",
+    });
+  } else if (data.device_mismatch) {
+    showToast(data.message || "Your account is already registered on another device. This device is not authorized to generate a QR pass.", "warning");
+    renderActivationPrompt(studentId, deviceFingerprint, {
+      message: data.message || "This browser is not registered. Do you want to activate this browser as your device?",
+    });
+  } else {
+    clearActivationPrompt();
   }
 
   const registerForm = document.getElementById("registerForm");
@@ -935,6 +1076,12 @@ async function checkRegistrationStatus() {
       
       // Pre-populate QR panel with student ID (for when they navigate to QR)
       document.getElementById("qr_student_id").value = registrationData.student_id;
+
+      if (!getStoredPrivateKey()) {
+        renderActivationPrompt(registrationData.student_id, currentDeviceFingerprint, {
+          message: "This browser is not registered. Do you want to activate this browser as your device?",
+        });
+      }
     }
   } catch (e) {
   }

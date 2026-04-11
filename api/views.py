@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt #add
 
 from .models import Attendance, SECTION_CHOICES, Session, Student
-from .utils import generate_keys, private_key_matches_public_hex, sign_message, verify_signature
+from .utils import generate_keys, private_key_matches_public_hex, sign_message, verify_signature, is_valid_public_key_hex
 
 # API view implementations for student registration, login, QR generation,
 # attendance reporting, and portal dashboard features.
@@ -614,6 +614,9 @@ def register_student(request):
         same_section = existing_student.section == section
         same_email = (existing_student.email or "").lower() == email.lower()
 
+        if existing_student.device_fingerprint != device_fingerprint:
+            return Response({"error": "Student already registered on another device."}, status=409)
+
         if same_name and same_section and same_email:
             return Response(
                 {
@@ -696,25 +699,61 @@ def student_login(request):
     if student.section != section:
         return Response({"error": "Student account not found."}, status=404)
 
-    if student.device_fingerprint != device_fingerprint:
-        return Response({"error": "This student account is already registered on another device."}, status=409)
-
-    # Successful login returns the registered student payload (signing keys stay on the client).
-    return Response(
-        {
-            "message": "Login successful",
-            "already_registered": True,
-            "public_key": student.public_key,
-            "student": {
-                "student_id": student.student_id,
-                "name": student.name,
-                "section": student.section,
-                "email": student.email,
-            },
+    device_authorized = student.device_fingerprint == device_fingerprint
+    response_payload = {
+        "message": "Login successful",
+        "already_registered": True,
+        "public_key": student.public_key,
+        "student": {
+            "student_id": student.student_id,
+            "name": student.name,
+            "section": student.section,
+            "email": student.email,
         },
-        status=200,
-    )
+        "device_authorized": device_authorized,
+    }
 
+    if not device_authorized:
+        response_payload["device_mismatch"] = True
+        response_payload["message"] = "Your account is already registered on another device. This device is not authorized to generate a QR pass."
+
+    return Response(response_payload, status=200)
+
+
+# API endpoint for activating the current browser/device.
+# Generates a new public key for the student and replaces the existing public key.
+@api_view(["POST"])
+@csrf_exempt
+@permission_classes([AllowAny])
+def activate_browser(request):
+    student_id = str(request.data.get("student_id", "")).strip()
+    public_key = str(request.data.get("public_key", "")).strip()
+    device_fingerprint = str(request.data.get("device_fingerprint", "")).strip()
+
+    if not all([student_id, public_key, device_fingerprint]):
+        return Response({"error": "Student ID, public key, and device fingerprint are required."}, status=400)
+
+    try:
+        student = Student.objects.get(student_id=student_id)
+    except Student.DoesNotExist:
+        return Response({"error": "Student account not found."}, status=404)
+
+    if not is_valid_public_key_hex(public_key):
+        return Response({"error": "Invalid public key format."}, status=400)
+
+    student.public_key = public_key
+    student.device_fingerprint = device_fingerprint
+    student.save(update_fields=["public_key", "device_fingerprint"])
+
+    return Response({
+        "message": "This browser is now your active device.",
+        "student": {
+            "student_id": student.student_id,
+            "name": student.name,
+            "section": student.section,
+            "email": student.email,
+        },
+    }, status=200)
 
 
 # API endpoint for staff to create a new attendance session.
@@ -842,7 +881,7 @@ def generate_qr(request):
     if not private_key:
         return Response({"error": "Private key is required for QR generation"}, status=400)
     if not private_key_matches_public_hex(private_key, student.public_key):
-        return Response({"error": "Unauthorized QR generation request"}, status=403)
+        return Response({"error": "This device is no longer authorized to generate a QR pass."}, status=403)
 
     session = Session.objects.filter(session_code=session_code, status="ACTIVE").first()
     if not session:

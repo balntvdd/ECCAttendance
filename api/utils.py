@@ -46,6 +46,16 @@ def private_key_matches_public_hex(private_key_hex, public_key_hex):
         return False
 
 
+def is_valid_public_key_hex(public_key_hex):
+    """Return True if provided public key hex can be parsed as a P-256 verifying key."""
+    try:
+        public_key_bytes = bytes.fromhex(public_key_hex.strip())
+        VerifyingKey.from_string(public_key_bytes, curve=NIST256p)
+        return True
+    except Exception:
+        return False
+
+
 def sign_message(private_key_hex, message):
     """
     Sign a message using the provided private key.
