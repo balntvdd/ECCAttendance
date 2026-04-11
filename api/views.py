@@ -881,13 +881,7 @@ def generate_qr(request):
     if not private_key:
         return Response({"error": "Private key is required for QR generation"}, status=400)
     if not private_key_matches_public_hex(private_key, student.public_key):
-        return Response(
-            {
-                "error": "This device is no longer authorized to generate a QR pass.",
-                "activation_required": True,
-            },
-            status=403,
-        )
+        return Response({"error": "This device is no longer authorized to generate a QR pass."}, status=403)
 
     session = Session.objects.filter(session_code=session_code, status="ACTIVE").first()
     if not session:
