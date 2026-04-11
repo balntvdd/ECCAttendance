@@ -119,27 +119,36 @@ function clearActivationPrompt() {
 }
 
 function renderActivationPrompt(studentId, deviceFingerprint, options = {}) {
-  const container = document.getElementById("alreadyRegistered");
-  if (!container || !studentId) return;
+  if (!studentId) return;
 
   clearActivationPrompt();
 
   const message = options.message || "This browser is not registered. Do you want to activate this browser as your device?";
   const prompt = document.createElement("div");
   prompt.id = "browserActivationPrompt";
-  prompt.style.cssText = "border:1px solid rgba(15,23,42,.08);padding:1rem 1.1rem;border-radius:16px;background:rgba(255,255,255,.82);box-shadow:0 20px 45px rgba(15,23,42,.06);margin-top:1.25rem;text-align:left;";
+  prompt.className = "otp-modal-overlay";
   prompt.innerHTML = `
-    <div style="display:flex;align-items:flex-start;gap:0.9rem;flex-wrap:wrap;">
-      <div style="flex:1;min-width:220px;">
-        <p style="margin:0 0 0.8rem;color:var(--text-700);font-weight:600;">${message}</p>
-        <p style="margin:0;color:var(--text-500);font-size:0.95rem;line-height:1.5;">
-          Activating this browser will generate a fresh signing key pair locally and replace the current authorized device for your account.
-        </p>
+    <div class="otp-modal" style="max-width:520px; transform:scale(0.9); transition:transform 0.3s ease;">
+      <div class="otp-modal-header">
+        <h3>${message}</h3>
+        <button type="button" class="otp-modal-close" id="closeActivationPromptBtn" aria-label="Close activation prompt">×</button>
       </div>
-      <button type="button" class="btn btn-primary" id="activateBrowserBtn" style="white-space:nowrap;">Activate this browser</button>
+      <div class="otp-modal-body">
+        <p>Activating this browser creates a fresh signing key pair locally and replaces the current active browser for your account.</p>
+        <button type="button" class="btn btn-primary" id="activateBrowserBtn">Activate this browser</button>
+      </div>
     </div>
   `;
-  container.appendChild(prompt);
+  document.body.appendChild(prompt);
+
+  prompt.addEventListener("click", (e) => {
+    if (e.target === prompt) clearActivationPrompt();
+  });
+
+  const closeBtn = document.getElementById("closeActivationPromptBtn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", clearActivationPrompt);
+  }
 
   const btn = document.getElementById("activateBrowserBtn");
   if (btn) {
@@ -157,6 +166,7 @@ function renderActivationPrompt(studentId, deviceFingerprint, options = {}) {
       }
     });
   }
+  console.debug("renderActivationPrompt", { studentId, deviceFingerprint, message });
 }
 
 async function activateBrowserForStudent(studentId, deviceFingerprint) {

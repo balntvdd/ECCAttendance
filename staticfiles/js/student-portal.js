@@ -80,6 +80,114 @@ function setStoredPublicKey(value) {
   setCookie("ecc_public_key", value);
 }
 
+function clearActivationPrompt() {
+  const section = document.getElementById("browserActivationPrompt");
+  if (section) section.remove();
+}
+
+function renderActivationPrompt(studentId, deviceFingerprint, options = {}) {
+  if (!studentId) return;
+
+  clearActivationPrompt();
+
+  const message = options.message || "This browser is not registered. Do you want to activate this browser as your device?";
+  const prompt = document.createElement("div");
+  prompt.id = "browserActivationPrompt";
+  prompt.className = "otp-modal-overlay";
+  prompt.innerHTML = `
+    <div class="otp-modal" style="max-width:520px; transform:scale(0.9); transition:transform 0.3s ease;">
+      <div class="otp-modal-header">
+        <h3>${message}</h3>
+        <button type="button" class="otp-modal-close" id="closeActivationPromptBtn" aria-label="Close activation prompt">×</button>
+      </div>
+      <div class="otp-modal-body">
+        <p>Activating this browser creates a fresh signing key pair locally and replaces the current active browser for your account.</p>
+        <button type="button" class="btn btn-primary" id="activateBrowserBtn">Activate this browser</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(prompt);
+
+  prompt.addEventListener("click", (e) => {
+    if (e.target === prompt) clearActivationPrompt();
+  });
+
+  const closeBtn = document.getElementById("closeActivationPromptBtn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", clearActivationPrompt);
+  }
+
+  const btn = document.getElementById("activateBrowserBtn");
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner"></span> Activating…';
+      try {
+        await activateBrowserForStudent(studentId, deviceFingerprint);
+      } catch (err) {
+        showToast(err.message || "Activation failed. Please try again.", "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    });
+  }
+  console.debug("renderActivationPrompt", { studentId, deviceFingerprint, message });
+}
+
+async function activateBrowserForStudent(studentId, deviceFingerprint) {
+  if (!studentId || !deviceFingerprint) {
+    throw new Error("Unable to activate browser because student or device fingerprint is missing.");
+  }
+
+  let privateKey = getStoredPrivateKey();
+  let publicKey = getStoredPublicKey();
+
+  if (!privateKey || !publicKey) {
+    const keys = await generateEccKeyPair();
+    privateKey = keys.privateKey;
+    publicKey = keys.publicKey;
+    setStoredPrivateKey(privateKey);
+    setStoredPublicKey(publicKey);
+  }
+
+  try {
+    await fetch(`${API_BASE}/api/csrf/`, { credentials: "include" });
+    const headers = { "Content-Type": "application/json" };
+    const csrfToken = getCookie("csrftoken");
+    if (csrfToken) headers["X-CSRFToken"] = csrfToken;
+
+    const res = await fetch(`${API_BASE}/api/activate-browser/`, {
+      method: "POST",
+      headers,
+      credentials: "include",
+      body: JSON.stringify({
+        student_id: studentId,
+        public_key: publicKey,
+        private_key: privateKey,
+        device_fingerprint: deviceFingerprint,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to activate this browser.");
+    }
+
+    clearActivationPrompt();
+    showToast("This browser is now your active device.", "success");
+    return data;
+  } catch (err) {
+    try {
+      localStorage.removeItem("ecc_private_key");
+      localStorage.removeItem("ecc_public_key");
+    } catch (e) {}
+    setCookie("ecc_private_key", "");
+    setCookie("ecc_public_key", "");
+    throw err;
+  }
+}
+
 // Device fingerprint generation and management
 // Generate a device fingerprint from browser/hardware properties.
 // Used to recognize the same device across browsers.
@@ -446,7 +554,10 @@ document.getElementById("qrForm").addEventListener("submit", async (e) => {
   const privateKey = getStoredPrivateKey();
 
   if (!privateKey) {
-    showToast("Private key not found. Please register again.", "error");
+    showToast("This browser is not registered. Activate this browser to generate a QR pass.", "warning");
+    renderActivationPrompt(studentId, deviceFingerprint, {
+      message: "This browser is not registered. Do you want to activate this browser as your device?",
+    });
     generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
     return;
   }
@@ -474,9 +585,13 @@ document.getElementById("qrForm").addEventListener("submit", async (e) => {
     });
     const data = await res.json();
     
-    // Handle device mismatch - show modal
-    if (res.status === 403 && data.show_modal) {
-      showToast(data.modal_message, "error");
+    // Handle device mismatch and activation-required response.
+    if (res.status === 403 && (data.show_modal || /not authorized|not registered/i.test(data.error || ""))) {
+      const message = data.modal_message || data.error || "This browser is not authorized to generate a QR pass. Activate this browser to continue.";
+      showToast(message, "warning");
+      renderActivationPrompt(studentId, deviceFingerprint, {
+        message,
+      });
       generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
       return;
     }
@@ -627,6 +742,14 @@ async function refreshQrCode(studentId, sessionCode, deviceFingerprint) {
 
     const data = await res.json();
     if (!res.ok) {
+      if (res.status === 403 && (data.show_modal || /not authorized|not registered/i.test(data.error || ""))) {
+        const message = data.modal_message || data.error || "This browser is not authorized to generate a QR pass. Activate this browser to continue.";
+        showToast(message, "warning");
+        renderActivationPrompt(studentId, deviceFingerprint, {
+          message,
+        });
+        return;
+      }
       handleDeletedStudentResponse(res, data);
       return;
     }
