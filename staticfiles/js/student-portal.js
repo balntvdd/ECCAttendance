@@ -194,20 +194,39 @@ async function activateBrowserForStudent(studentId, deviceFingerprint) {
 // Device fingerprint generation and management
 // Generate a device fingerprint from browser/hardware properties.
 // Used to recognize the same device across browsers.
-function generateDeviceFingerprint() {
-  // Always compute fresh from hardware properties to ensure consistency across browsers
+function computeDeviceFingerprint(options = {}) {
+  const width = screen.width || 0;
+  const height = screen.height || 0;
+  const availWidth = options.useScreenDimensionsForAvail ? width : screen.availWidth || width;
+  const availHeight = options.useScreenDimensionsForAvail ? height : screen.availHeight || height;
+  const orientation = options.ignoreOrientation ? "" : (screen.orientation ? screen.orientation.type : "");
+
   const fingerprint = [
     navigator.platform || "",
-    screen.width + 'x' + screen.height,
-    screen.availWidth + 'x' + screen.availHeight,
+    `${width}x${height}`,
+    `${availWidth}x${availHeight}`,
     screen.colorDepth || "",
     screen.pixelDepth || "",
     navigator.hardwareConcurrency || "",
     navigator.maxTouchPoints || "",
     new Date().getTimezoneOffset(),
-    screen.orientation ? screen.orientation.type : "",
+    orientation,
   ].join('|');
+
   return btoa(fingerprint).replace(/[^a-zA-Z0-9]/g, '').substr(0, 32);
+}
+
+function generateDeviceFingerprint() {
+  return computeDeviceFingerprint();
+}
+
+function generateDeviceFingerprintCandidates() {
+  return [
+    computeDeviceFingerprint(),
+    computeDeviceFingerprint({ ignoreOrientation: true }),
+    computeDeviceFingerprint({ useScreenDimensionsForAvail: true }),
+    computeDeviceFingerprint({ ignoreOrientation: true, useScreenDimensionsForAvail: true }),
+  ].filter(Boolean);
 }
 
 function getStoredDeviceFingerprint() {
@@ -920,21 +939,45 @@ function showLoginModal() {
       const csrfToken = getCookie("csrftoken");
       if (csrfToken) headers["X-CSRFToken"] = csrfToken;
 
-      const res = await fetch(`${API_BASE}/api/student-login/`, {
-        method: "POST", 
-        headers: headers,
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+      const candidateFingerprints = generateDeviceFingerprintCandidates();
+      let loginResponse = null;
+      let loginData = null;
+      let loginRes = null;
 
-      if (!res.ok) {
-        if (handleDeletedStudentResponse(res, data)) {
+      const attemptLogin = async (fingerprint) => {
+        payload.device_fingerprint = fingerprint;
+        const res = await fetch(`${API_BASE}/api/student-login/`, {
+          method: "POST",
+          headers: headers,
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        return { res, data };
+      };
+
+      loginResponse = await attemptLogin(deviceFingerprint);
+      loginRes = loginResponse.res;
+      loginData = loginResponse.data;
+
+      if (!loginRes.ok && loginRes.status === 403 && loginData.device_mismatch) {
+        for (const candidate of candidateFingerprints) {
+          if (candidate === deviceFingerprint) continue;
+          loginResponse = await attemptLogin(candidate);
+          loginRes = loginResponse.res;
+          loginData = loginResponse.data;
+          if (loginRes.ok) break;
+          if (loginRes.status !== 403 || !loginData.device_mismatch) break;
+        }
+      }
+
+      if (!loginRes.ok) {
+        if (handleDeletedStudentResponse(loginRes, loginData)) {
           loginBtn.innerHTML = orig; loginBtn.classList.remove("btn-loading");
           closeLoginModal();
           return;
         }
-        showToast(data.error || "Login failed.", "error");
+        showToast(loginData.error || "Login failed.", "error");
         loginBtn.innerHTML = orig; loginBtn.classList.remove("btn-loading");
         return;
       }
