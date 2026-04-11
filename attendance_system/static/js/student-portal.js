@@ -609,9 +609,13 @@ document.getElementById("qrForm").addEventListener("submit", async (e) => {
     });
     const data = await res.json();
     
-    // Handle device mismatch - show modal
-    if (res.status === 403 && data.show_modal) {
-      showToast(data.modal_message, "error");
+    // Handle device mismatch and activation-required response.
+    if (res.status === 403 && (data.show_modal || /not authorized|not registered/i.test(data.error || ""))) {
+      const message = data.modal_message || data.error || "This browser is not authorized to generate a QR pass. Activate this browser to continue.";
+      showToast(message, "warning");
+      renderActivationPrompt(studentId, deviceFingerprint, {
+        message,
+      });
       generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
       return;
     }
@@ -762,6 +766,14 @@ async function refreshQrCode(studentId, sessionCode, deviceFingerprint) {
 
     const data = await res.json();
     if (!res.ok) {
+      if (res.status === 403 && (data.show_modal || /not authorized|not registered/i.test(data.error || ""))) {
+        const message = data.modal_message || data.error || "This browser is not authorized to generate a QR pass. Activate this browser to continue.";
+        showToast(message, "warning");
+        renderActivationPrompt(studentId, deviceFingerprint, {
+          message,
+        });
+        return;
+      }
       handleDeletedStudentResponse(res, data);
       return;
     }
