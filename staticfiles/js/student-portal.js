@@ -194,17 +194,34 @@ async function activateBrowserForStudent(studentId, deviceFingerprint) {
 // Device fingerprint generation and management
 // Generate a device fingerprint from browser/hardware properties.
 // Used to recognize the same device across browsers.
-function computeDeviceFingerprint(options = {}) {
+function normalizePlatform(platform) {
+  const value = (platform || "").toLowerCase();
+  if (value.includes("iphone") || value.includes("ipad") || value.includes("ipod")) return "ios";
+  if (value.includes("android")) return "android";
+  if (value.includes("mac")) return "mac";
+  if (value.includes("win")) return "windows";
+  if (value.includes("linux")) return "linux";
+  return value || "unknown";
+}
+
+function isFacebookInAppBrowser() {
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger/i.test(ua);
+}
+
+function getDeviceFingerprintComponents(options = {}) {
   const width = screen.width || 0;
   const height = screen.height || 0;
-  const availWidth = options.useScreenDimensionsForAvail ? width : screen.availWidth || width;
-  const availHeight = options.useScreenDimensionsForAvail ? height : screen.availHeight || height;
-  const orientation = options.ignoreOrientation ? "" : (screen.orientation ? screen.orientation.type : "");
+  const minDim = Math.min(width, height);
+  const maxDim = Math.max(width, height);
+  const dims = options.useActualDimensions ? `${width}x${height}` : `${minDim}x${maxDim}`;
+  const devicePixelRatio = Math.round((window.devicePixelRatio || 1) * 100) / 100;
+  const orientation = options.includeOrientation && screen.orientation ? screen.orientation.type : "";
 
-  const fingerprint = [
-    navigator.platform || "",
-    `${width}x${height}`,
-    `${availWidth}x${availHeight}`,
+  return [
+    normalizePlatform(navigator.platform),
+    dims,
+    devicePixelRatio,
     screen.colorDepth || "",
     screen.pixelDepth || "",
     navigator.hardwareConcurrency || "",
@@ -212,25 +229,40 @@ function computeDeviceFingerprint(options = {}) {
     new Date().getTimezoneOffset(),
     orientation,
   ].join('|');
+}
 
+function computeDeviceFingerprint(options = {}) {
+  const fingerprint = getDeviceFingerprintComponents(options);
   return btoa(fingerprint).replace(/[^a-zA-Z0-9]/g, '').substr(0, 32);
 }
 
 function generateDeviceFingerprint() {
-  return computeDeviceFingerprint();
+  return computeDeviceFingerprint({ includeOrientation: false });
 }
 
 function generateDeviceFingerprintCandidates() {
-  return [
-    computeDeviceFingerprint(),
-    computeDeviceFingerprint({ ignoreOrientation: true }),
-    computeDeviceFingerprint({ useScreenDimensionsForAvail: true }),
-    computeDeviceFingerprint({ ignoreOrientation: true, useScreenDimensionsForAvail: true }),
-  ].filter(Boolean);
+  const candidates = new Set();
+  candidates.add(computeDeviceFingerprint({ includeOrientation: false }));
+  candidates.add(computeDeviceFingerprint({ includeOrientation: true }));
+  candidates.add(computeDeviceFingerprint({ useActualDimensions: true, includeOrientation: false }));
+  candidates.add(computeDeviceFingerprint({ useActualDimensions: true, includeOrientation: true }));
+
+  if (isFacebookInAppBrowser()) {
+    candidates.add(computeDeviceFingerprint({ useActualDimensions: true, includeOrientation: false }));
+    candidates.add(computeDeviceFingerprint({ useActualDimensions: true, includeOrientation: true }));
+  }
+
+  return Array.from(candidates).filter(Boolean);
 }
 
 function getStoredDeviceFingerprint() {
   return generateDeviceFingerprint();
+}
+
+function doesStoredFingerprintMatchCurrent(storedFingerprint) {
+  if (!storedFingerprint) return false;
+  const candidates = generateDeviceFingerprintCandidates();
+  return candidates.includes(storedFingerprint);
 }
 
 function hasStoredEccKeyPair() {
@@ -252,8 +284,7 @@ async function maybeShowGlobalBrowserActivationPrompt() {
     return;
   }
 
-  const currentFingerprint = getStoredDeviceFingerprint();
-  if (registrationData.device_fingerprint !== currentFingerprint) {
+  if (!doesStoredFingerprintMatchCurrent(registrationData.device_fingerprint)) {
     return;
   }
 
@@ -999,7 +1030,7 @@ function showLoginModal() {
       }
 
       // Success
-      handleLoginSuccess(data, deviceFingerprint);
+      handleLoginSuccess(loginData, deviceFingerprint);
       closeLoginModal();
       showToast("Login successful! Welcome back.", "success");
     } catch {
@@ -1120,7 +1151,7 @@ async function checkRegistrationStatus() {
       return;
     }
     
-    if (registrationData.device_fingerprint === currentDeviceFingerprint) {
+    if (doesStoredFingerprintMatchCurrent(registrationData.device_fingerprint)) {
       // Device recognized and student registered - switch to registered state
       // Hide tab bar completely
       document.querySelector('.tab-bar').style.display = 'none';
