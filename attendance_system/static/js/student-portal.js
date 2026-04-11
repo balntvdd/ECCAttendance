@@ -143,20 +143,70 @@ function renderActivationPrompt(studentId, deviceFingerprint, options = {}) {
 
   const btn = document.getElementById("activateBrowserBtn");
   if (btn) {
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      const original = btn.innerHTML;
-      btn.innerHTML = '<span class="spinner"></span> Activating…';
+    btn.addEventListener("click", () => {
+      showBrowserActivationConfirmModal(studentId, deviceFingerprint);
+    });
+  }
+}
+
+function showBrowserActivationConfirmModal(studentId, deviceFingerprint) {
+  const modalHTML = `
+    <div class="otp-modal-overlay" id="activateBrowserConfirmOverlay" style="opacity: 0; transition: opacity 0.3s ease;">
+      <div class="otp-modal" style="max-width: 460px; transform: scale(0.9); transition: transform 0.3s ease;">
+        <div class="otp-modal-header">
+          <h3>Activate this browser?</h3>
+          <button type="button" class="otp-modal-close" onclick="closeBrowserActivationConfirmModal()">×</button>
+        </div>
+        <div class="otp-modal-body" style="padding: 1rem 1.25rem;">
+          <p style="margin:0 0 1rem; color: var(--text-300); line-height:1.6;">
+            Activating this browser will deactivate your current active device. Continue?
+          </p>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;justify-content:flex-end;margin-top:1.25rem;">
+            <button type="button" class="btn btn-ghost" onclick="closeBrowserActivationConfirmModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="confirmActivateBrowserBtn">Yes, Activate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (document.getElementById("activateBrowserConfirmOverlay")) return;
+  document.body.insertAdjacentHTML("beforeend", modalHTML);
+  const overlay = document.getElementById("activateBrowserConfirmOverlay");
+  const modal = overlay.querySelector('.otp-modal');
+  setTimeout(() => {
+    overlay.style.opacity = '1';
+    modal.style.transform = 'scale(1)';
+  }, 10);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeBrowserActivationConfirmModal();
+  });
+
+  const confirmBtn = document.getElementById("confirmActivateBrowserBtn");
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="spinner"></span> Activating…';
       try {
         await activateBrowserForStudent(studentId, deviceFingerprint);
+        closeBrowserActivationConfirmModal();
       } catch (err) {
         showToast(err.message || "Activation failed. Please try again.", "error");
       } finally {
-        btn.disabled = false;
-        btn.innerHTML = original;
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = 'Yes, Activate';
       }
     });
   }
+}
+
+function closeBrowserActivationConfirmModal() {
+  const overlay = document.getElementById("activateBrowserConfirmOverlay");
+  if (!overlay) return;
+  const modal = overlay.querySelector('.otp-modal');
+  overlay.style.opacity = '0';
+  if (modal) modal.style.transform = 'scale(0.9)';
+  setTimeout(() => overlay.remove(), 300);
 }
 
 async function activateBrowserForStudent(studentId, deviceFingerprint) {
@@ -613,6 +663,14 @@ document.getElementById("qrForm").addEventListener("submit", async (e) => {
           generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
           return;
         }
+        if (res.status === 403 && data.activation_required) {
+          showToast(data.error || "This device is no longer authorized. Activate this browser to continue.", "warning");
+          renderActivationPrompt(studentId, deviceFingerprint, {
+            message: data.error || "This device is no longer authorized. Do you want to activate this browser as your device?",
+          });
+          generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading");
+          return;
+        }
         showToast(data.error || "QR generation failed.", "error");
         generateQrBtn.innerHTML = orig; generateQrBtn.classList.remove("btn-loading"); return;
       }
@@ -754,6 +812,13 @@ async function refreshQrCode(studentId, sessionCode, deviceFingerprint) {
 
     const data = await res.json();
     if (!res.ok) {
+      if (res.status === 403 && data.activation_required) {
+        showToast(data.error || "This device is no longer authorized. Activate this browser to continue.", "warning");
+        renderActivationPrompt(studentId, deviceFingerprint, {
+          message: data.error || "This device is no longer authorized. Do you want to activate this browser as your device?",
+        });
+        return;
+      }
       handleDeletedStudentResponse(res, data);
       return;
     }
